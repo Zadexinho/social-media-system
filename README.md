@@ -112,10 +112,7 @@ social-management-platform/
 │   └── pdf-slide-generator.gs
 │
 ├── database/                       # Database schemas
-│   ├── supabase/
-│   │   └── tables.md               # Table documentation
-│   └── airtable/
-│       └── MAIN-table-schema.md
+│   ├── supabase-tables.md
 │
 ├── docs/                           # Documentation
 │   ├── SETUP.md
@@ -208,7 +205,7 @@ Updates Airtable + Logs to Supabase
 - `client_stats` - Client analytics
 - `recent_executions` - Recent activity
 
-See [database/supabase/tables.md](database/supabase/tables.md) for complete schema.
+See [database/supabase/tables.md](database/supabase-tables.md) for complete schema.
 
 ---
 
