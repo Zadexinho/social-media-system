@@ -1,0 +1,264 @@
+{
+  "name": "Reporting V4",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "client_name"
+            },
+            {
+              "name": "turkish_message"
+            },
+            {
+              "name": "admin_message"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        608,
+        608
+      ],
+      "id": "5d9ead8b-b0a6-42a3-8394-8b0b8255281a",
+      "name": "router input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        560
+      ],
+      "id": "f7edd60a-49ea-4130-bd5d-f420a30aabbd",
+      "name": "Error Processing"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.admin_chat_id }}",
+        "text": "={{ $json.admin_message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        240
+      ],
+      "id": "63cdd134-3170-4dce-8ba8-cb04097db86d",
+      "name": "admin",
+      "webhookId": "d6d6a771-d240-4f90-a94b-63f4976ac159",
+      "credentials": {
+        "telegramApi": {
+          "id": "8XtVw9vvSn5LcXTU",
+          "name": "Detso Engine"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.client_chat_id }}",
+        "text": "={{ $json.turkish_message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        416
+      ],
+      "id": "b917d612-06e1-43cc-bd8f-b9c3f9c75d97",
+      "name": "kurtulush_client",
+      "webhookId": "f932ee12-0428-45f8-a4e0-b2388cc7881f",
+      "credentials": {
+        "telegramApi": {
+          "id": "1QmK1nFem5OpsUXc",
+          "name": "Noesis Marketing Automation"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map client to Telegram chat (FROM SUPABASE)\nconst inputData = $json;\nconst supabaseResult = $('Client Registry').item.json;\n\nconst ADMIN_CHAT = \"623282562\";\n\nlet clientChat = ADMIN_CHAT;\n\n// Get from Supabase if available\nif (supabaseResult && Array.isArray(supabaseResult) && supabaseResult.length > 0) {\n  const clientConfig = supabaseResult[0];\n  clientChat = clientConfig.telegram_channel_id || ADMIN_CHAT;\n  console.log(`✅ Using chat from registry: ${clientChat}`);\n} else {\n  console.warn(`⚠️ Client not found, using admin chat`);\n}\n\nreturn {\n  ...inputData,\n  telegram_chat_id: clientChat,\n  admin_chat_id: ADMIN_CHAT\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        608
+      ],
+      "id": "ab72864e-6517-4c3f-a4e2-e75a898973fb",
+      "name": "Registry",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "DJniklZaoePMyFyM",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/DJniklZaoePMyFyM",
+          "cachedResultName": "Error Support V2 - AI Powered"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1792,
+        560
+      ],
+      "id": "e79a61b7-acc4-4271-a998-62780db9493d",
+      "name": "Error Support"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT telegram_channel_id, instagram_page_name, client_identifier\n   FROM detso.client_registry \n   WHERE client_name = $1 \n   AND active = true\n   LIMIT 1",
+        "options": {
+          "queryReplacement": "={\n     \"parameters\": [\n       \"={{ $json.client_name }}\"\n     ]\n   }"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        768,
+        608
+      ],
+      "id": "97b875ed-a357-4ba1-aaf4-d86a586e4c43",
+      "name": "Client Registry",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "router input": {
+      "main": [
+        [
+          {
+            "node": "Client Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "admin": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "kurtulush_client": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registry": {
+      "main": [
+        [
+          {
+            "node": "kurtulush_client",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "admin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Registry": {
+      "main": [
+        [
+          {
+            "node": "Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "G156XuOJ2RELTtiB"
+  },
+  "versionId": "f49225b5-0714-4998-bd10-a5ddeedf890b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "1uZqcny2pLVOGX5c",
+  "tags": [
+    {
+      "createdAt": "2025-08-15T15:07:46.694Z",
+      "updatedAt": "2025-08-15T15:07:46.694Z",
+      "id": "CGtmYkV5vcrKjrlo",
+      "name": "dev"
+    }
+  ]
+}

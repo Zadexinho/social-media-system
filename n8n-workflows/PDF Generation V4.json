@@ -1,0 +1,798 @@
+{
+  "name": "PDF Generation V4",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "app6CaiSm3iHcY3Ev",
+          "mode": "list",
+          "cachedResultName": "Detso Lab Dev",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl1LzxpB4Kl0uMMP",
+          "mode": "list",
+          "cachedResultName": "PDF",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev/tbl1LzxpB4Kl0uMMP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Client": "={{ $json.businessName }}",
+            "PDF": "={{ $json.pdfFile }}",
+            "Name": "={{ $json.pdfFile[0].filename }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "PDF",
+              "displayName": "PDF",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Oluşturuldu",
+              "displayName": "Oluşturuldu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "KURTULUŞ",
+                  "value": "KURTULUŞ"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        272,
+        -80
+      ],
+      "id": "c96ca92f-0aa4-43a2-9d3d-251260987b11",
+      "name": "PDF Database Upload",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "NqCHhqCEfned8s1J",
+          "name": "Detso Dev"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://script.google.com/macros/s/AKfycbxFIsBowYjrmtJwAfart4bAidD6E6WpYUdjpWVpGTx0aXOF9-F0fZpE_e3u-Ded8ujY/exec",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload }}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "timeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -128,
+        80
+      ],
+      "id": "07270281-71fd-4a67-aefb-d2db2e7fee31",
+      "name": "AppScript Request",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        256
+      ],
+      "id": "71aa367b-0f01-4f11-894f-9c2065a357e7",
+      "name": "Error Processing"
+    },
+    {
+      "parameters": {
+        "content": "## Appscript",
+        "height": 296,
+        "width": 596
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -800,
+        80
+      ],
+      "typeVersion": 1,
+      "id": "e77361ce-568e-40a3-a46a-7a7e551066de",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Status Log",
+        "height": 440,
+        "width": 1020
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -176,
+        -208
+      ],
+      "typeVersion": 1,
+      "id": "84084edf-9ce8-4007-b3c4-4e842e0914d4",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "72eedccb-c576-4175-bd95-e2bdfa6d4218",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        272
+      ],
+      "id": "41b5af5d-bac6-41da-a029-35bda77d3446",
+      "name": "Webhook",
+      "webhookId": "72eedccb-c576-4175-bd95-e2bdfa6d4218"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        272
+      ],
+      "id": "adf090de-5d29-4e15-922d-101711465bf6",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 🚀 N8N DATA PREP - V5.2: Added Video Detection for Play Button Overlay\n// This node now detects video content and passes isVideo flag to Apps Script\n\n// NEW CODE:\nconst webhookData = $json;\nconst records = webhookData.records || [];\nconst clientConfig = webhookData.client_config;\n\nconsole.log(`📥 Processing ${records.length} records for ${clientConfig.business_name}`);\n\nif (records.length === 0) {\n  console.log('❌ No records received from Client Router');\n  return [];\n}\n\n// ==================================================================\n// == 2. HELPER FUNCTIONS (UPDATED WITH VIDEO DETECTION)\n// ==================================================================\n\n// NEW: Function to detect if content is video based on media files\nfunction isVideoContent(medya, postType) {\n  if (!medya || medya.length === 0) return false;\n  \n  // For REELS: always consider as video\n  if (postType === \"REELS\") return true;\n  \n  // For STORY: check if there are video files in media\n  if (postType === \"STORY\") {\n    return medya.some(att => att.type && att.type.startsWith('video/'));\n  }\n  \n  // For CAROUSEL: check if first media item is video\n  if (postType === \"CAROUSEL\") {\n    return medya.length > 0 && medya[0].type && medya[0].type.startsWith('video/');\n  }\n  \n  // For FEED: check if media contains video\n  return medya.some(att => att.type && att.type.startsWith('video/'));\n}\n\n// Helper function to get images based on your final data structure\n// FIXED: Always finds images by type, not position\nfunction getImages(medya, postType) {\n  if (!medya || medya.length === 0) return null;\n  \n  if (postType === \"CAROUSEL\") {\n    return medya.filter(att => att.type.startsWith('image/')).map(att => att.url);\n  } \n  \n  // For REELS and STORY: Always get the IMAGE file, regardless of position\n  if (postType === \"REELS\" || postType === \"STORY\") {\n    const imageFile = medya.find(att => att.type.startsWith('image/'));\n    return imageFile ? imageFile.url : medya[0].url; // Use image if found, fallback to first item\n  }\n  \n  // For FEED: should be image in first position\n  return medya[0].url; \n}\n\n// Helper function to format the display date\nfunction formatPublishDate(paylaşımTarihi) {\n  if (!paylaşımTarihi) return \"\";\n  const [day, month, year] = paylaşımTarihi.split('-');\n  const months = { \n    \"01\": \"Ocak\", \"02\": \"Şubat\", \"03\": \"Mart\", \"04\": \"Nisan\", \n    \"05\": \"Mayıs\", \"06\": \"Haziran\", \"07\": \"Temmuz\", \"08\": \"Ağustos\", \n    \"09\": \"Eylül\", \"10\": \"Ekim\", \"11\": \"Kasım\", \"12\": \"Aralık\" \n  };\n  return `Yayın Tarihi: ${day} ${months[month] || month} ${year}`;\n}\n\n// ==================================================================\n// == 3. MAIN TRANSFORMATION LOGIC (UPDATED WITH VIDEO DETECTION)\n// ==================================================================\n\n// Transform records into slides\nconst allSlides = records.map(record => {\n  const typeName = record.fields[\"Paylaşım türü\"]?.name || \"IG Feed\";\n  let postType;\n  if (typeName.includes(\"Story\")) postType = \"STORY\";\n  else if (typeName.includes(\"Reels\")) postType = \"REELS\";\n  else if (typeName.includes(\"Carousel\")) postType = \"CAROUSEL\";\n  else postType = \"FEED\";\n  \n  // NEW: Detect if this is video content\n  const medyaFiles = record.fields[\"Medya\"] || [];\n  const isVideo = isVideoContent(medyaFiles, postType);\n  \n  const slide = {\n    type: postType,\n    content: record.fields[\"Gönderi Metni\"] || \"\",\n    publishDate: formatPublishDate(record.fields[\"Paylaşım Tarihi\"]),\n    rawDate: record.fields[\"Paylaşım Tarihi\"],\n    medyaUrl: (postType === 'REELS' || postType === 'STORY') ? (record.fields[\"Medya URL\"] || \"\") : \"\",\n    isVideo: isVideo  // NEW: Add video detection flag\n  };\n\n  const imageUrls = getImages(record.fields[\"Medya\"], postType);\n  if (postType === \"CAROUSEL\") {\n    slide.images = imageUrls;\n  } else {\n    slide.imageUrl = imageUrls;\n  }\n  \n  // Debug logging for video detection\n  if (isVideo) {\n    console.log(`🎥 Video detected: ${postType} - ${slide.content.substring(0, 50)}...`);\n  }\n  \n  return slide;\n\n}).filter(slide => slide.imageUrl || (slide.images && slide.images.length > 0));\n\n// Separate into main posts and story posts\nlet mainPosts = [];\nlet storyPosts = [];\n\nallSlides.forEach(slide => {\n  if (slide.type === 'STORY') {\n    storyPosts.push(slide);\n  } else {\n    mainPosts.push(slide);\n  }\n});\n\n// Sort ONLY the main posts chronologically\nmainPosts.sort((a, b) => {\n  const dateA = new Date(a.rawDate?.split('-').reverse().join('-') || '1970-01-01');\n  const dateB = new Date(b.rawDate?.split('-').reverse().join('-') || '1970-01-01');\n  return dateA - dateB;\n});\n\n// Clean up rawDate from all posts after sorting is done\nmainPosts.forEach(post => delete post.rawDate);\nstoryPosts.forEach(post => delete post.rawDate);\n\n// ==================================================================\n// == 4. BUILD PAYLOAD USING CLIENT CONFIG\n// ==================================================================\n\nconst currentDate = new Date();\nconst turkishMonths = [\n  \"OCAK\", \"ŞUBAT\", \"MART\", \"NİSAN\", \"MAYIS\", \"HAZİRAN\", \n  \"TEMMUZ\", \"AĞUSTOS\", \"EYLÜL\", \"EKİM\", \"KASIM\", \"ARALIK\"\n];\nconst currentMonth = turkishMonths[currentDate.getMonth()];\n\nconst payload = {\n  businessName: clientConfig.business_name,\n  fileName: `${clientConfig.file_prefix}_${currentMonth}_${currentDate.getFullYear()}.pdf`,\n  month: currentMonth,\n  mainPosts: mainPosts.length > 0 ? mainPosts : undefined,\n  storyPosts: storyPosts.length > 0 ? storyPosts : undefined,\n  recordsProcessed: records.length  // Track total records received\n};\n\n// Enhanced logging with video stats\nconst videoMainPosts = mainPosts.filter(post => post.isVideo).length;\nconst videoStoryPosts = storyPosts.filter(post => post.isVideo).length;\n\nconsole.log(`📤 Sending payload to Google Apps Script:`);\nconsole.log(`🏢 Business: ${payload.businessName}`);\nconsole.log(`📄 Filename: ${payload.fileName}`);\nconsole.log(`📊 Main Posts: ${mainPosts.length} (${videoMainPosts} videos), Story Posts: ${storyPosts.length} (${videoStoryPosts} videos)`);\n\nreturn [{ json: { payload } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        96
+      ],
+      "id": "5404c053-fa04-4df1-afd7-ec9e8ba0ee42",
+      "name": "Appscript Data Prep Reels & Stories",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the Apps Script response data\nconst appsScriptData = $node[\"AppScript Request\"].json;\nconst payload = $node[\"Appscript Data Prep Reels & Stories\"].json.payload;\n\nconsole.log(\"Apps Script data:\", JSON.stringify(appsScriptData, null, 2));\n\n// Create the file attachment using the direct PDF export URL\nconst fileAttachment = {\n    filename: payload.fileName,\n    url: appsScriptData.pdfExportUrl\n};\n\nconsole.log(\"File attachment:\", JSON.stringify(fileAttachment, null, 2));\n\n// Return the formatted data for Airtable\nreturn {\n    fileName: payload.fileName,\n    pdfFile: [fileAttachment], // Airtable will download from the URL\n    createdAt: new Date().toISOString(),\n    slidesCount: appsScriptData.slidesCount,\n    status: \"Ready\",\n    presentationUrl: appsScriptData.presentationUrl,\n    businessName: payload.businessName,\n    month: payload.month\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        0
+      ],
+      "id": "203fb082-ed9a-4f52-8507-d567f70b67f1",
+      "name": "AppScript Output Processing Reels & Stories",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📊 SUPABASE PDF GENERATION LOGGER\n// This node logs PDF generation activities to Supabase\n\n// Get data from previous nodes\nconst appScriptOutput = $node[\"AppScript Output Processing Reels & Stories\"].json;\nconst airtableOutput = $node[\"PDF Database Upload\"].json;\nconst clientRegistry = $node[\"Format Client Config\"].json;\nconst dataPrep = $node[\"Appscript Data Prep Reels & Stories\"].json;\n\n// Extract Google Presentation ID from URL\nfunction extractPresentationId(presentationUrl) {\n  if (!presentationUrl) return null;\n  const match = presentationUrl.match(/\\/presentation\\/d\\/([a-zA-Z0-9-_]+)/);\n  return match ? match[1] : null;\n}\n\n// Calculate processing duration\nconst processingStart = new Date(clientRegistry.timestamp || new Date());\nconst processingEnd = new Date();\nconst processingDuration = processingEnd.getTime() - processingStart.getTime();\n\n// Get current date for generation_date\nconst currentDate = new Date();\nconst generationDate = currentDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD\n\n// Build the log entry\nconst logEntry = {\n  // Client & Business context\n  client_id: clientRegistry.client_id,\n  business_name: clientRegistry.business_name,\n  table_id: clientRegistry.client_config.table_id,\n  \n  // PDF Details\n  file_name: appScriptOutput.fileName,\n  month: appScriptOutput.month,\n  year: currentDate.getFullYear(),\n  generation_date: generationDate,\n  pdf_url: appScriptOutput.pdfFile?.[0]?.url,\n  presentation_url: appScriptOutput.presentationUrl,\n  \n  // Content metrics\n  slides_count: appScriptOutput.slidesCount || 0,\n  main_posts_count: dataPrep.payload.mainPosts?.length || 0,\n  story_posts_count: dataPrep.payload.storyPosts?.length || 0,\n  total_records_processed: dataPrep.payload.recordsProcessed || 0,\n  \n  // Processing details\n  status: appScriptOutput.status || 'Ready',\n  button_type: 'PDF_GENERATE',\n  processing_duration_ms: processingDuration,\n  \n  // File storage\n  airtable_record_id: airtableOutput.id,\n  google_presentation_id: extractPresentationId(appScriptOutput.presentationUrl),\n  \n  // Metadata\n  created_by: 'n8n_automation',\n  retry_count: 0\n};\n\nconsole.log(`📊 Logging PDF generation for ${logEntry.business_name}:`);\nconsole.log(`📄 File: ${logEntry.file_name}`);\nconsole.log(`📅 Date: ${logEntry.generation_date}`);\nconsole.log(`📈 Stats: ${logEntry.slides_count} slides, ${logEntry.total_records_processed} records processed`);\nconsole.log(`⏱️ Duration: ${Math.round(logEntry.processing_duration_ms / 1000)}s`);\n\n// Return the log entry for Supabase\nreturn [{\n  json: logEntry\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -128
+      ],
+      "id": "aaf86f3b-d321-4949-a91e-eff8ff12efa6",
+      "name": "Log Prep",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "detso",
+          "mode": "list",
+          "cachedResultName": "detso"
+        },
+        "table": {
+          "__rl": true,
+          "value": "pdf_generation_logs",
+          "mode": "list",
+          "cachedResultName": "pdf_generation_logs"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_id",
+              "displayName": "client_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "business_name",
+              "displayName": "business_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "table_id",
+              "displayName": "table_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_name",
+              "displayName": "file_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "month",
+              "displayName": "month",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "year",
+              "displayName": "year",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pdf_url",
+              "displayName": "pdf_url",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "presentation_url",
+              "displayName": "presentation_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "slides_count",
+              "displayName": "slides_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "main_posts_count",
+              "displayName": "main_posts_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "story_posts_count",
+              "displayName": "story_posts_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_records_processed",
+              "displayName": "total_records_processed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "button_type",
+              "displayName": "button_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processing_duration_ms",
+              "displayName": "processing_duration_ms",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "airtable_record_id",
+              "displayName": "airtable_record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "google_presentation_id",
+              "displayName": "google_presentation_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_by",
+              "displayName": "created_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "retry_count",
+              "displayName": "retry_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "generation_date",
+              "displayName": "generation_date",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        624,
+        -192
+      ],
+      "id": "d3312582-4f25-464a-854d-c89f89dc6387",
+      "name": "Success Logs",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract Webhook Data - Handle Aggregate wrapper\nconst input = $input.item.json;\n\n// Navigate through the wrapper structure\nlet payload;\n\nif (Array.isArray(input.data)) {\n    // Aggregated format: [{ data: [{ body: {...} }] }]\n    payload = input.data[0].body;\n} else if (input.body) {\n    // Direct webhook format: { body: {...} }\n    payload = input.body;\n} else {\n    // Legacy format: direct payload\n    payload = input;\n}\n\nconsole.log('Extracted payload:', payload);\n\nreturn {\n    client_name: payload.client_name,\n    table_name: payload.table_name,\n    button_type: payload.button_type,\n    records: payload.records,\n    timestamp: payload.timestamp\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        272
+      ],
+      "id": "a69ff0c3-e45d-4690-8363-1e5da28d7e10",
+      "name": "Extract Webhook Data",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "d2ohnnou3mnHEwV5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/d2ohnnou3mnHEwV5",
+          "cachedResultName": "Error Management - AI Powered V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        912,
+        256
+      ],
+      "id": "a55b15e8-06e0-42f6-a5bd-6e10444df1f8",
+      "name": "Error Support"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM detso.client_registry \n   WHERE client_name = $1 \n   AND active = true\n   LIMIT 1",
+        "options": {
+          "queryReplacement": "={\n     \"parameters\": [\n       \"={{ $('Extract Webhook Data').item.json.client_name }}\"\n     ]\n   }"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -768,
+        208
+      ],
+      "id": "d047b5ba-ee06-41b1-b1d3-ecb64d8e58b7",
+      "name": "Client Registry",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMAT CLIENT CONFIG - PDF Generation Adapter\n// ============================================================================\n\nconst webhookData = $('Extract Webhook Data').item.json;\nconst supabaseResult = $json;\n\nconsole.log(`🔍 CLIENT REGISTRY LOOKUP (PDF Generation)`);\nconsole.log(`   Client: ${webhookData.client_name}`);\n\n// ============================================================================\n// VALIDATION: Client Found\n// ============================================================================\n\nif (!supabaseResult || (Array.isArray(supabaseResult) && supabaseResult.length === 0)) {\n  console.error(`❌ Client not found: ${webhookData.client_name}`);\n  \n  throw new Error(`CLIENT_NOT_FOUND: ${webhookData.client_name} not in registry or inactive`);\n}\n\nconst clientConfig = Array.isArray(supabaseResult) ? supabaseResult[0] : supabaseResult;\n\n// ============================================================================\n// VALIDATION: Required Fields\n// ============================================================================\n\nif (!clientConfig.active) {\n  throw new Error(`CLIENT_INACTIVE: ${webhookData.client_name}`);\n}\n\nif (!clientConfig.instagram_page_id || clientConfig.instagram_page_id === 'REPLACE_WITH_ACTUAL_PAGE_ID') {\n  throw new Error(`MISSING_PAGE_ID: ${webhookData.client_name} needs Instagram page_id`);\n}\n\nconsole.log(`✅ Client config loaded: ${clientConfig.instagram_page_name}`);\n\n// ============================================================================\n// FORMAT OUTPUT - PDF Generation Format\n// ============================================================================\n\nreturn {\n  ...webhookData, // Pass through all webhook data\n  \n  // Client configuration\n  client_config: {\n    client_id: clientConfig.client_identifier,\n    business_name: clientConfig.instagram_page_name,\n    file_prefix: clientConfig.instagram_page_name.replace(/\\s+/g, ''), // Remove spaces\n    table_id: clientConfig.airtable_table_id,\n    airtable_base: clientConfig.airtable_base_id,\n    telegram_chat_id: clientConfig.telegram_channel_id\n  },\n  \n  // Expose commonly used fields for compatibility\n  client_id: clientConfig.client_identifier,\n  business_name: clientConfig.instagram_page_name,\n  file_prefix: clientConfig.instagram_page_name.replace(/\\s+/g, '')\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        176
+      ],
+      "id": "87eda091-2a12-4f75-950b-5e048c9f9a37",
+      "name": "Format Client Config",
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "PDF Database Upload": {
+      "main": [
+        [
+          {
+            "node": "Log Prep",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AppScript Request": {
+      "main": [
+        [
+          {
+            "node": "AppScript Output Processing Reels & Stories",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Extract Webhook Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appscript Data Prep Reels & Stories": {
+      "main": [
+        [
+          {
+            "node": "AppScript Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AppScript Output Processing Reels & Stories": {
+      "main": [
+        [
+          {
+            "node": "PDF Database Upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Prep": {
+      "main": [
+        [
+          {
+            "node": "Success Logs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Logs": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Webhook Data": {
+      "main": [
+        [
+          {
+            "node": "Client Registry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Client Config": {
+      "main": [
+        [
+          {
+            "node": "Appscript Data Prep Reels & Stories",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Registry": {
+      "main": [
+        [
+          {
+            "node": "Format Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "G156XuOJ2RELTtiB",
+    "timezone": "Europe/Istanbul"
+  },
+  "versionId": "8ce346a6-dd9b-43db-a214-6bf2bd5cb1d8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "Twy1A5B4q4uFlYLl",
+  "tags": [
+    {
+      "createdAt": "2025-08-15T15:07:46.694Z",
+      "updatedAt": "2025-08-15T15:07:46.694Z",
+      "id": "CGtmYkV5vcrKjrlo",
+      "name": "dev"
+    }
+  ]
+}

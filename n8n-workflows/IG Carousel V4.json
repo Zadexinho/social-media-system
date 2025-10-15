@@ -1,0 +1,762 @@
+{
+  "name": "IG Carousel V4",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// INPUT VALIDATION & CAROUSEL MEDIA SETUP - IG Carousel Universal\n// ============================================================================\n\nconst input = $json;\n\n// ============================================================================\n// 1. INPUT VALIDATION\n// ============================================================================\n\nconst requiredFields = ['platform', 'mediaType', 'media', 'client_identifier', 'instagram_business_account_id'];\nconst missingFields = [];\n\nrequiredFields.forEach(field => {\n  if (!input[field]) {\n    missingFields.push(field);\n  }\n});\n\nif (missingFields.length > 0) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"validation_failed\",\n      message: `Missing required fields: ${missingFields.join(', ')}`,\n      execution_status: \"failed\",\n      client: input.client_identifier || \"unknown\",\n      platform: \"IG Carousel\"\n    }\n  }];\n}\n\n// ============================================================================\n// 2. PLATFORM VALIDATION\n// ============================================================================\n\nif (input.platform !== 'IG Carousel') {\n  return [{\n    json: {\n      error: true,\n      error_type: \"platform_mismatch\",\n      message: `Platform mismatch: ${input.platform}. Expected: IG Carousel`,\n      execution_status: \"failed\",\n      client: input.client_identifier\n    }\n  }];\n}\n\n// ============================================================================\n// 3. IG CAROUSEL MEDIA PROCESSING\n// ============================================================================\n\nconst mediaArray = input.media || [];\n\nif (!Array.isArray(mediaArray) || mediaArray.length === 0) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"no_media\",\n      message: \"No media provided for IG Carousel\",\n      execution_status: \"failed\",\n      client: input.client_identifier,\n      platform: \"IG Carousel\"\n    }\n  }];\n}\n\n// Filter for images only\nconst carouselImages = mediaArray.filter(file => {\n  const isImage = file.type?.toLowerCase().includes('image') ||\n                 ['jpg', 'jpeg', 'png', 'webp'].some(ext => \n                   file.filename?.toLowerCase().includes(`.${ext}`)\n                 );\n  return isImage;\n});\n\n// Carousel validation\nif (carouselImages.length < 2) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"insufficient_images\",\n      message: \"IG Carousel requires at least 2 images\",\n      execution_status: \"failed\",\n      client: input.client_identifier,\n      platform: \"IG Carousel\"\n    }\n  }];\n}\n\nif (carouselImages.length > 10) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"too_many_images\",\n      message: \"IG Carousel supports maximum 10 images\",\n      execution_status: \"failed\",\n      client: input.client_identifier,\n      platform: \"IG Carousel\",\n      note: `Found ${carouselImages.length} images, using first 10`\n    }\n  }];\n}\n\n// ============================================================================\n// 4. EXECUTION CONTEXT SETUP\n// ============================================================================\n\nconst executionContext = {\n  execution_id: input.execution_context?.execution_id || input.execution_id || `ig_carousel_${Date.now()}`,\n  client_name: input.client_name || input.client_identifier,\n  client_identifier: input.client_identifier,\n  table_id: input.table_id,\n  record_id: input.record_id,\n  original_record_id: input.original_record?.id || input.record_id,\n  started_at: new Date().toISOString(),\n  timeout_ms: input.timeout_ms || 180000,\n  max_retries: input.max_retries || 3\n};\n\n// ============================================================================\n// 5. IG CAROUSEL CONFIGURATION (DYNAMIC PAGE ID)\n// ============================================================================\n\nconst carouselConfig = {\n  instagram_business_account_id: input.instagram_business_account_id, // FROM CLIENT REGISTRY\n  api_version: \"v23.0\",\n  media_type: \"CAROUSEL\",\n  access_token_field: \"instagram_access_token\"\n};\n\nconsole.log(`[${executionContext.execution_id}] IG Carousel for ${executionContext.client_name} - Page ID: ${carouselConfig.instagram_business_account_id}`);\n\n// ============================================================================\n// 6. CHILD CONTAINERS BATCH PREPARATION (DYNAMIC PAGE ID)\n// ============================================================================\n\nconst childRequests = carouselImages.slice(0, 10).map((image, index) => ({\n  method: \"POST\",\n  relative_url: `v23.0/${carouselConfig.instagram_business_account_id}/media`, // DYNAMIC\n  body: `image_url=${encodeURIComponent(image.url)}&is_carousel_item=true`,\n  name: `child_${index}`\n}));\n\n// ============================================================================\n// 7. SUCCESS OUTPUT\n// ============================================================================\n\nreturn [{\n  json: {\n    validation_passed: true,\n    ready_for_posting: true,\n    workflow_step: \"create_child_containers\",\n    \n    execution_context: executionContext,\n    \n    content: {\n      images: carouselImages.slice(0, 10).map((img, index) => ({\n        url: img.url,\n        filename: img.filename || `carousel_image_${index + 1}.jpg`,\n        type: img.type,\n        size: img.size,\n        id: img.id,\n        width: img.width,\n        height: img.height,\n        index: index\n      })),\n      caption: input.caption || '',\n      mediaType: 'carousel',\n      total_images: Math.min(carouselImages.length, 10),\n      api_endpoint: 'batch_children_only'\n    },\n    \n    batch_config: {\n      requests: childRequests,\n      total_requests: childRequests.length,\n      request_type: \"child_containers_only\"\n    },\n    \n    parent_config: {\n      caption: input.caption || '',\n      expected_children_count: Math.min(carouselImages.length, 10),\n      instagram_business_account_id: carouselConfig.instagram_business_account_id // FOR PARENT CREATION\n    },\n    \n    instagram_config: carouselConfig,\n    \n    original_input: {\n      table_id: input.table_id,\n      record_id: input.record_id,\n      total_media_files: mediaArray.length,\n      carousel_images_count: carouselImages.length,\n      images_used: Math.min(carouselImages.length, 10)\n    },\n    \n    debug: {\n      input_received_at: new Date().toISOString(),\n      media_files_received: mediaArray.length,\n      carousel_images_found: carouselImages.length,\n      carousel_images_used: Math.min(carouselImages.length, 10),\n      image_filenames: carouselImages.slice(0, 10).map(img => img.filename),\n      child_requests_created: childRequests.length,\n      expected_next_step: \"batch_child_creation_only\",\n      page_id: carouselConfig.instagram_business_account_id\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        240
+      ],
+      "id": "82334a37-6bf7-4a42-852a-af20f02a5eb1",
+      "name": "Input Validation & Context Setup",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PARSE CHILDREN RESPONSE\n// Extract child container IDs from batch response and prepare for parent creation\n\nconst batchResponse = $json;\nconst validationData = $('Input Validation & Context Setup').item.json;\nconst expectedChildren = validationData.content.total_images;\n\n// ============================================================================\n// 1. VALIDATE BATCH RESPONSE STRUCTURE\n// ============================================================================\n\nif (!Array.isArray(batchResponse)) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"invalid_children_response\",\n      message: \"Children batch response is not an array\",\n      raw_response: batchResponse,\n      execution_status: \"failed\"\n    }\n  }];\n}\n\nif (batchResponse.length !== expectedChildren) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"incorrect_children_count\",\n      message: `Expected ${expectedChildren} child responses, got ${batchResponse.length}`,\n      expected: expectedChildren,\n      received: batchResponse.length,\n      execution_status: \"failed\"\n    }\n  }];\n}\n\n// ============================================================================\n// 2. EXTRACT CHILD CONTAINER IDS\n// ============================================================================\n\nconst childContainerIds = [];\nconst failedChildren = [];\n\nbatchResponse.forEach((response, index) => {\n  if (!response || response.code !== 200) {\n    failedChildren.push({\n      index: index,\n      code: response?.code,\n      error: response?.body ? JSON.parse(response.body) : \"No response body\"\n    });\n  } else {\n    try {\n      const parsedBody = JSON.parse(response.body);\n      if (parsedBody.id) {\n        childContainerIds.push(parsedBody.id);\n      } else {\n        failedChildren.push({\n          index: index,\n          error: \"No ID in response body\",\n          body: parsedBody\n        });\n      }\n    } catch (parseError) {\n      failedChildren.push({\n        index: index,\n        error: \"JSON parse failed\",\n        body: response.body\n      });\n    }\n  }\n});\n\n// ============================================================================\n// 3. CHECK FOR FAILURES\n// ============================================================================\n\nif (failedChildren.length > 0) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"child_containers_failed\",\n      message: `${failedChildren.length} out of ${expectedChildren} child containers failed`,\n      failed_children: failedChildren,\n      successful_children: childContainerIds,\n      execution_status: \"partial_failure\"\n    }\n  }];\n}\n\nif (childContainerIds.length !== expectedChildren) {\n  return [{\n    json: {\n      error: true,\n      error_type: \"missing_child_ids\",\n      message: `Expected ${expectedChildren} child IDs, got ${childContainerIds.length}`,\n      child_ids: childContainerIds,\n      execution_status: \"failed\"\n    }\n  }];\n}\n\n// ============================================================================\n// 4. PREPARE PARENT CONTAINER DATA\n// ============================================================================\n\n// Create comma-separated list of child IDs for parent container\nconst childrenParameter = childContainerIds.join(',');\n\n// ============================================================================\n// 5. SUCCESS OUTPUT - READY FOR PARENT CREATION\n// ============================================================================\n\nreturn [{\n  json: {\n    // Success indicators\n    children_created_successfully: true,\n    ready_for_parent_creation: true,\n    workflow_step: \"create_parent_container\",\n    \n    // Child container data\n    child_container_ids: childContainerIds,\n    children_count: childContainerIds.length,\n    children_parameter: childrenParameter, // For parent container creation\n    \n    // Parent container configuration\n    parent_container_config: {\n      media_type: \"CAROUSEL\",\n      children: childrenParameter,\n      caption: validationData.parent_config.caption,\n      instagram_business_account_id: \"17841470796910825\",\n      api_version: \"v23.0\"\n    },\n    \n    // Preserve execution context\n    execution_context: validationData.execution_context,\n    \n    // Preserve original content data\n    content: validationData.content,\n    \n    // Debug information\n    debug: {\n      children_parsed_at: new Date().toISOString(),\n      child_container_ids: childContainerIds,\n      children_parameter_length: childrenParameter.length,\n      next_step: \"create_parent_container\",\n      parent_will_reference: `children=${childrenParameter}`\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        112
+      ],
+      "id": "0b59100e-71a1-455f-80f6-9632d85d3e9a",
+      "name": "Parse Children Response",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// WORKFLOW STATUS - Pass Through Tier 3 Result\n// ============================================================================\n// Purpose: Tier 3 already formatted everything, just pass it through\n// ============================================================================\n\nconst tier3Result = $json; // From Tier 3 Publisher\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`✅ CAROUSEL WORKFLOW - COMPLETE`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\nif (tier3Result.success) {\n  console.log(`📊 Publication Summary:`);\n  console.log(`   • Platform: ${tier3Result.platform}`);\n  console.log(`   • Permalink: ${tier3Result.publication_data.permalink}`);\n  console.log(`   • Media ID: ${tier3Result.publication_data.published_media_id}`);\n  console.log(`   • Client: ${tier3Result.execution_context.client_name}`);\n  console.log(`✅ Carousel published successfully!`);\n}\n\n// Pass through Tier 3 result unchanged\nreturn [{ json: tier3Result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -64
+      ],
+      "id": "b6fb70d1-b972-49d2-b850-dcb479416144",
+      "name": "Workflow Status",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{ $('Input Validation & Context Setup').item.json.instagram_config.instagram_business_account_id }}/batch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "batch",
+              "value": "={{ JSON.stringify($json.batch_config.requests) }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        272,
+        176
+      ],
+      "id": "5fe294c2-9259-403d-892f-1f04cda59a5e",
+      "name": "Batch Child Creation",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{ $json.parent_container_config.instagram_business_account_id }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "=CAROUSEL"
+            },
+            {
+              "name": "children",
+              "value": "={{ $json.children_parameter }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $json.parent_container_config.caption }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        16
+      ],
+      "id": "e6fa82a1-67a5-4954-856d-64e6a29e4bfc",
+      "name": "Parent Container Creation",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARE PUBLISHER INPUT - For Tier 3\n// ============================================================================\n// Purpose: Format container data for IG Container Publisher\n// ============================================================================\n\nconst parentContainer = $json; // From Parent Container Creation\nconst inputData = $('Input Validation & Context Setup').item.json;\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`📦 CAROUSEL - PREPARING FOR TIER 3`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\n// ============================================================================\n// VALIDATE PARENT CONTAINER\n// ============================================================================\n\nif (!parentContainer || !parentContainer.id) {\n  throw new Error('CAROUSEL_FAILED: Parent container creation did not return container ID');\n}\n\nconsole.log(`✅ Parent Container ID: ${parentContainer.id}`);\n\n// ============================================================================\n// BUILD TIER 3 INPUT\n// ============================================================================\n\nconst tier3Input = {\n  // Required for Tier 3\n  container_id: parentContainer.id,\n  instagram_business_account_id: inputData.instagram_config.instagram_business_account_id,\n  platform: \"IG Carousel\",\n  wait_duration: 10, // Carousel uses 10 seconds\n  \n  // Execution context (pass through)\n  execution_context: inputData.execution_context,\n  \n  // Content information\n  content: {\n    caption: inputData.content.caption || '',\n    media_type: \"CAROUSEL\",\n    total_images: inputData.content.total_images\n  },\n  \n  // Client config for notifications (pass through if exists)\n  client_config: inputData.client_config || {}\n};\n\nconsole.log(`📊 Tier 3 Input Prepared:`);\nconsole.log(`   • Container ID: ${tier3Input.container_id}`);\nconsole.log(`   • Platform: ${tier3Input.platform}`);\nconsole.log(`   • Page ID: ${tier3Input.instagram_business_account_id}`);\nconsole.log(`   • Wait Duration: ${tier3Input.wait_duration}s`);\nconsole.log(`   • Total Images: ${tier3Input.content.total_images}`);\nconsole.log(`   • Client: ${tier3Input.execution_context.client_name}`);\n\nconsole.log(`✅ Ready to call Tier 3 Publisher`);\n\nreturn [{ json: tier3Input }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        -48
+      ],
+      "id": "491270b5-3393-4374-b995-fd0689f7250c",
+      "name": "Prepare Publisher Input",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "3KKIXN76kjS7lv4y",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/3KKIXN76kjS7lv4y",
+          "cachedResultName": "IG Container Publisher V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1088,
+        -64
+      ],
+      "id": "28648ce3-97b0-4987-adff-f6c87cf536ae",
+      "name": "Call Tier 3 Publisher"
+    },
+    {
+      "parameters": {
+        "content": "",
+        "height": 232,
+        "width": 596,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1136,
+        128
+      ],
+      "typeVersion": 1,
+      "id": "1201de51-8066-462e-afca-4768685c4e4a",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "app6CaiSm3iHcY3Ev",
+          "mode": "list",
+          "cachedResultName": "Detso Lab Dev",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnyTHlVdztn0inX",
+          "mode": "list",
+          "cachedResultName": "MAIN",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev/tblnyTHlVdztn0inX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Backend Status": "Will be shared"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Gönderi",
+              "displayName": "Gönderi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi Metni",
+              "displayName": "Gönderi Metni",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Medya",
+              "displayName": "Medya",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım türü",
+              "displayName": "Paylaşım türü",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IG Reels",
+                  "value": "IG Reels"
+                },
+                {
+                  "name": "IG Feed",
+                  "value": "IG Feed"
+                },
+                {
+                  "name": "IG Story",
+                  "value": "IG Story"
+                },
+                {
+                  "name": "IG Carousel",
+                  "value": "IG Carousel"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Zamanı",
+              "displayName": "Paylaşım Zamanı",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Meter",
+              "displayName": "Meter",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Aksiyon",
+              "displayName": "Aksiyon",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Kullanıma Hazır",
+                  "value": "Kullanıma Hazır"
+                },
+                {
+                  "name": "PDF",
+                  "value": "PDF"
+                },
+                {
+                  "name": "Paylaşıma Hazır",
+                  "value": "Paylaşıma Hazır"
+                },
+                {
+                  "name": "Paylaşıldı",
+                  "value": "Paylaşıldı"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi URL",
+              "displayName": "Gönderi URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım",
+              "displayName": "Paylaşım",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Medya URL",
+              "displayName": "Medya URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Tarihi",
+              "displayName": "Paylaşım Tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Backend Status",
+              "displayName": "Backend Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Will be shared",
+                  "value": "Will be shared"
+                },
+                {
+                  "name": "Is sharing",
+                  "value": "Is sharing"
+                },
+                {
+                  "name": "Shared",
+                  "value": "Shared"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Değiştirildi",
+              "displayName": "Değiştirildi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Evet",
+                  "value": "Evet"
+                },
+                {
+                  "name": "Hayır",
+                  "value": "Hayır"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Düzenlenmiş Metin",
+              "displayName": "Düzenlenmiş Metin",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Değişiklik Notu",
+              "displayName": "Değişiklik Notu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "İşlendi",
+              "displayName": "İşlendi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "kurtuluş",
+                  "value": "kurtuluş"
+                },
+                {
+                  "name": "detsostudio",
+                  "value": "detsostudio"
+                },
+                {
+                  "name": "garnerhotelistanbul",
+                  "value": "garnerhotelistanbul"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1296,
+        192
+      ],
+      "id": "e2e44aec-16fb-49dc-83a7-8c2734001e48",
+      "name": "Set status: Will be shared",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "NqCHhqCEfned8s1J",
+          "name": "Detso Dev"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        192
+      ],
+      "id": "c5c8c2a4-836b-44ac-b327-8e855af9a5f4",
+      "name": "Error Processing"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "DJniklZaoePMyFyM",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/DJniklZaoePMyFyM",
+          "cachedResultName": "Error Support V2 - AI Powered"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1552,
+        192
+      ],
+      "id": "0b399341-4325-4e63-8e98-85aaf31e2d5b",
+      "name": "Error Support"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        128
+      ],
+      "id": "ce9ba79f-2467-44c3-947f-37ec6b30d528",
+      "name": "Error Processing1"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -80,
+        240
+      ],
+      "id": "b5fb0fc5-15d8-4653-af62-5e43298ab3e5",
+      "name": "Tier 1 Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Input Validation & Context Setup": {
+      "main": [
+        [
+          {
+            "node": "Batch Child Creation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Children Response": {
+      "main": [
+        [
+          {
+            "node": "Parent Container Creation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Status": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Child Creation": {
+      "main": [
+        [
+          {
+            "node": "Parse Children Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parent Container Creation": {
+      "main": [
+        [
+          {
+            "node": "Prepare Publisher Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Publisher Input": {
+      "main": [
+        [
+          {
+            "node": "Call Tier 3 Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Tier 3 Publisher": {
+      "main": [
+        [
+          {
+            "node": "Workflow Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing": {
+      "main": [
+        [
+          {
+            "node": "Set status: Will be shared",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set status: Will be shared": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing1": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tier 1 Output": {
+      "main": [
+        [
+          {
+            "node": "Input Validation & Context Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "G156XuOJ2RELTtiB"
+  },
+  "versionId": "1a04da83-9558-430d-9dc3-b0b9c2c107ce",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "rPmAD4cx0PHt5tu1",
+  "tags": [
+    {
+      "createdAt": "2025-08-15T15:07:46.694Z",
+      "updatedAt": "2025-08-15T15:07:46.694Z",
+      "id": "CGtmYkV5vcrKjrlo",
+      "name": "dev"
+    }
+  ]
+}

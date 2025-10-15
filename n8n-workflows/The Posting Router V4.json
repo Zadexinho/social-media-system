@@ -1,0 +1,2235 @@
+{
+  "name": "The Posting Router V4",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// SHARING PERMISSION & MEDIA TYPE - Enhanced Version\n// ============================================================================\n// Purpose: Validate record readiness and extract media information\n// Input: Webhook context from Extract Webhook Data + Client Registry data\n// Output: Structured data ready for Platform Router\n// ============================================================================\n\n// Get webhook context and client config\nconst webhookContext = $('Extract Webhook Data').item.json;\nconst input = $json; // Contains client registry data\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`🔍 SHARING PERMISSION & MEDIA VALIDATION`);\nconsole.log(`   Execution ID: ${webhookContext.execution_id}`);\nconsole.log(`   Client: ${webhookContext.client_name}`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\n// Create execution log entry\nconst executionLog = {\n  execution_id: webhookContext.execution_id,\n  workflow_name: \"Posting Router\",\n  step: \"validation_and_preparation\",\n  started_at: new Date().toISOString(),\n  client_name: webhookContext.client_name,\n  table_id: webhookContext.table_id,\n  record_id: webhookContext.record_id,\n  triggered_by: webhookContext.triggered_by,\n  execution_type: webhookContext.execution_type\n};\n\ntry {\n  // ============================================================================\n  // 1. EXTRACT RECORD DATA FROM WEBHOOK\n  // ============================================================================\n  \n  const recordData = webhookContext.original_webhook?.record_data || webhookContext.record_data;\n  \n  if (!recordData) {\n    throw new Error('VALIDATION_FAILED: No record_data found in webhook payload');\n  }\n  \n  console.log(`📦 Record data received from webhook`);\n  \n  // ============================================================================\n  // 2. EXTRACT RECORD FIELDS\n  // ============================================================================\n  \n  const aksiyon = recordData.aksiyon;\n  const paylaşımTürü = recordData.platform;\n  const medya = recordData.media || [];\n  const content = recordData.caption || '';\n  const scheduledTime = recordData.scheduled_time || '';\n  \n  console.log(`📋 Field values:`);\n  console.log(`   Aksiyon: ${aksiyon}`);\n  console.log(`   Platform: ${paylaşımTürü}`);\n  console.log(`   Media count: ${medya.length}`);\n  console.log(`   Caption length: ${content.length} chars`);\n  \n  // ============================================================================\n  // 3. RECORD VALIDATION\n  // ============================================================================\n  \n  console.log(`🔍 Starting validation checks...`);\n  \n  // Check 1: Record Status\n  if (aksiyon !== 'Paylaşıma Hazır') {\n    throw new Error(`VALIDATION_FAILED: Record not ready for posting. Current Aksiyon: ${aksiyon}`);\n  }\n  console.log(`   ✅ Status check passed`);\n  \n  // Check 2: Platform Specified\n  if (!paylaşımTürü) {\n    throw new Error(`VALIDATION_FAILED: No platform specified (Paylaşım türü is empty)`);\n  }\n  console.log(`   ✅ Platform check passed`);\n  \n  // Check 3: Media Files Present\n  if (!medya || medya.length === 0) {\n    throw new Error(`VALIDATION_FAILED: No media files attached`);\n  }\n  console.log(`   ✅ Media check passed`);\n  \n  // Check 4: Platform Support\n  const supportedPlatforms = [\"IG Story\", \"IG Feed\", \"IG Reels\", \"IG Carousel\"];\n  if (!supportedPlatforms.includes(paylaşımTürü)) {\n    throw new Error(`VALIDATION_FAILED: Unsupported platform: ${paylaşımTürü}. Supported: ${supportedPlatforms.join(', ')}`);\n  }\n  console.log(`   ✅ Platform support check passed`);\n  \n  console.log(`✅ All validation checks passed for ${paylaşımTürü} post`);\n  \n  // ============================================================================\n  // 4. MEDIA TYPE DETECTION\n  // ============================================================================\n  \n  console.log(`🎬 Detecting media type...`);\n  \n  function detectMediaType(file) {\n    if (!file) return 'unknown';\n    \n    const type = file.type?.toLowerCase() || '';\n    const filename = file.filename?.toLowerCase() || '';\n    \n    // Check by MIME type first\n    if (type.includes('video') || type.includes('mp4') || type.includes('mov')) {\n      return 'video';\n    }\n    \n    if (type.includes('image') || type.includes('jpg') || type.includes('jpeg') || type.includes('png')) {\n      return 'image';\n    }\n    \n    // Check by file extension\n    if (/\\.(mp4|mov|avi|webm)$/i.test(filename)) {\n      return 'video';\n    }\n    \n    if (/\\.(jpg|jpeg|png|gif|webp)$/i.test(filename)) {\n      return 'image';\n    }\n    \n    return 'unknown';\n  }\n  \n  // Detect media type from first file\n  const primaryMediaType = detectMediaType(medya[0]);\n  \n  console.log(`   Primary media: ${primaryMediaType}`);\n  console.log(`   File: ${medya[0].filename}`);\n  console.log(`   Type: ${medya[0].type}`);\n  \n  // ============================================================================\n  // 5. MEDIA ARRAY PROCESSING\n  // ============================================================================\n  \n  const processedMedia = medya.map((file, index) => {\n    const mediaType = detectMediaType(file);\n    \n    console.log(`   Media ${index + 1}/${medya.length}: ${file.filename} (${mediaType})`);\n    \n    return {\n      id: file.id,\n      url: file.url,\n      filename: file.filename,\n      size: file.size,\n      type: file.type,\n      mediaType: mediaType,\n      width: file.width,\n      height: file.height,\n      thumbnails: file.thumbnails\n    };\n  });\n  \n  // ============================================================================\n  // 6. BUILD OUTPUT DATA\n  // ============================================================================\n  \n  console.log(`📤 Building output data for Platform Router...`);\n  \n  const outputData = {\n    // ===== EXECUTION CONTEXT =====\n    execution_context: {\n      execution_id: webhookContext.execution_id,\n      client_name: webhookContext.client_name,\n      client_identifier: webhookContext.client_identifier,\n      table_id: webhookContext.table_id,\n      record_id: webhookContext.record_id,\n      triggered_by: webhookContext.triggered_by,\n      execution_type: webhookContext.execution_type,\n      started_at: executionLog.started_at,\n      timeout_ms: 120000,\n      max_retries: 3\n    },\n    \n    // ===== CONTENT DATA =====\n    platform: paylaşımTürü,\n    mediaType: primaryMediaType,\n    media: processedMedia,\n    caption: content,\n    scheduled_time: scheduledTime,\n    \n    // ===== INSTAGRAM CONFIGURATION (from Client Registry) =====\n    instagram_business_account_id: input.instagram_business_account_id,\n    instagram_page_name: input.instagram_page_name,\n    \n    // ===== TELEGRAM CONFIGURATION (from Client Registry) =====\n    telegram_channel_id: input.telegram_channel_id,\n    telegram_admin_chat_id: input.telegram_admin_chat_id,\n    notifications_enabled: input.notifications_enabled,\n    \n    // ===== OPERATIONAL METADATA =====\n    client_timezone: input.client_timezone,\n    client_active: input.client_active,\n    account_type: input.account_type,\n    \n    // ===== VALIDATION STATUS =====\n    validation_passed: true,\n    validation_completed_at: new Date().toISOString(),\n    \n    // ===== PIPELINE STATUS =====\n    pipeline_status: {\n      validation_passed: true,\n      ready_for_posting: true,\n      should_continue: true,\n      error_occurred: false\n    },\n    \n    // ===== DEBUG INFO =====\n    debug: {\n      media_count: processedMedia.length,\n      primary_media_type: primaryMediaType,\n      caption_length: content.length,\n      has_scheduled_time: !!scheduledTime\n    }\n  };\n  \n  // ============================================================================\n  // 7. FINAL LOGGING\n  // ============================================================================\n  \n  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  console.log(`✅ VALIDATION SUCCESSFUL`);\n  console.log(`   Platform: ${paylaşımTürü}`);\n  console.log(`   Media Type: ${primaryMediaType}`);\n  console.log(`   Media Files: ${processedMedia.length}`);\n  console.log(`   Instagram Account: ${input.instagram_business_account_id}`);\n  console.log(`   Ready for: Platform Router`);\n  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  \n  return [{ json: outputData }];\n  \n} catch (error) {\n  // ============================================================================\n  // ERROR HANDLING & LOGGING\n  // ============================================================================\n  \n  const errorLog = {\n    ...executionLog,\n    completed_at: new Date().toISOString(),\n    status: \"validation_failed\",\n    error_message: error.message,\n    error_type: error.message.includes('VALIDATION_FAILED') ? 'validation_error' : 'system_error',\n    failed_at_step: \"validation_and_preparation\"\n  };\n  \n  console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  console.error(`❌ VALIDATION FAILED`);\n  console.error(`   Execution: ${webhookContext.execution_id}`);\n  console.error(`   Error: ${error.message}`);\n  console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  \n  // Return error data for error handling workflow\n  const errorData = {\n    execution_context: webhookContext,\n    pipeline_status: {\n      validation_passed: false,\n      ready_for_posting: false,\n      should_continue: false,\n      error_occurred: true\n    },\n    error_details: errorLog,\n    \n    // For error workflow routing\n    table_id: webhookContext.table_id,\n    client_name: webhookContext.client_name,\n    client_identifier: webhookContext.client_identifier\n  };\n  \n  // Re-throw error to trigger error path in workflow\n  throw new Error(`PIPELINE_VALIDATION_FAILED: ${error.message}`);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        128
+      ],
+      "id": "f85682fe-083d-4e30-b11a-4e880e171c30",
+      "name": "Sharing Permission & Media Type",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0436850a-258e-42dc-876b-f9978fffe491",
+              "leftValue": "={{ $json.pipeline_status.should_continue }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -64,
+        16
+      ],
+      "id": "ba789f5d-6efe-4830-a8d1-2e94cb310f20",
+      "name": "Permission Control"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// EXTRACT WEBHOOK DATA - Enhanced Version\n// ============================================================================\n// Purpose: Parse, validate, and enrich webhook payload from Airtable\n// Improvements:\n// - Better error handling with specific error codes\n// - More robust field validation\n// - Enhanced logging for debugging\n// - Turkish character normalization\n// - ISO timestamp standardization\n// ============================================================================\n\nconst webhookData = $json.body;\nconst currentTime = new Date().toISOString();\n\n// ============================================================================\n// HELPER FUNCTIONS\n// ============================================================================\n\n/**\n * Validate and clean client name\n * Client names come pre-normalized from Airtable (lowercase, no spaces)\n * We just validate and trim whitespace\n */\nfunction validateClientName(name) {\n  if (!name || typeof name !== 'string') {\n    return null;\n  }\n  \n  const cleaned = name.trim().toLowerCase();\n  \n  // Allow Turkish characters (ş, ğ, ü, ı, ö, ç) plus alphanumeric and underscores\n  if (!/^[a-zşğüıöç0-9_]+$/.test(cleaned)) {\n    console.warn(`⚠️  Client name \"${name}\" contains unexpected characters`);\n  }\n  \n  return cleaned;\n}\n\n/**\n * Generate unique execution ID\n * Format: exec_[timestamp]_[random]\n */\nfunction generateExecutionId() {\n  const timestamp = Date.now();\n  const random = Math.random().toString(36).substring(2, 11);\n  return `exec_${timestamp}_${random}`;\n}\n\n/**\n * Validate required fields\n */\nfunction validateRequiredFields(data) {\n  const required = {\n    table_id: data.table_id,\n    record_id: data.record_id,\n    client_name: data.client_name,\n    action: data.action,\n    triggered_by: data.triggered_by\n  };\n  \n  const missing = [];\n  const empty = [];\n  \n  for (const [field, value] of Object.entries(required)) {\n    if (value === undefined || value === null) {\n      missing.push(field);\n    } else if (typeof value === 'string' && value.trim() === '') {\n      empty.push(field);\n    }\n  }\n  \n  return { missing, empty, valid: missing.length === 0 && empty.length === 0 };\n}\n\n// ============================================================================\n// MAIN PROCESSING\n// ============================================================================\n\ntry {\n  // Generate execution ID first for logging\n  const executionId = generateExecutionId();\n  \n  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  console.log(`🚀 WEBHOOK RECEIVED [${executionId}]`);\n  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  \n  // ============================================================================\n  // STEP 1: VALIDATE WEBHOOK STRUCTURE\n  // ============================================================================\n  \n  if (!webhookData) {\n    throw new Error('WEBHOOK_EMPTY: No data received in webhook body');\n  }\n  \n  console.log(`📦 Webhook data received:`, JSON.stringify(webhookData, null, 2));\n  \n  // ============================================================================\n  // STEP 2: EXTRACT CORE FIELDS\n  // ============================================================================\n  \n  const tableId = webhookData.table_id;\n  const recordId = webhookData.record_id;\n  const clientName = webhookData.client_name;\n  const action = webhookData.action;\n  const triggeredBy = webhookData.triggered_by;\n  const executionType = webhookData.execution_type || 'scheduled';\n  const webhookTimestamp = webhookData.timestamp || currentTime;\n  \n  // ============================================================================\n  // STEP 3: VALIDATE REQUIRED FIELDS\n  // ============================================================================\n  \n  const validation = validateRequiredFields(webhookData);\n  \n  if (!validation.valid) {\n    const errorDetails = [];\n    \n    if (validation.missing.length > 0) {\n      errorDetails.push(`Missing fields: ${validation.missing.join(', ')}`);\n    }\n    \n    if (validation.empty.length > 0) {\n      errorDetails.push(`Empty fields: ${validation.empty.join(', ')}`);\n    }\n    \n    throw new Error(`WEBHOOK_VALIDATION_FAILED: ${errorDetails.join(' | ')}`);\n  }\n  \n  console.log(`✅ Field validation passed`);\n  \n  // ============================================================================\n  // STEP 4: VALIDATE AND CLEAN CLIENT NAME\n  // ============================================================================\n  \n  const clientIdentifier = validateClientName(clientName);\n  \n  if (!clientIdentifier) {\n    throw new Error(`CLIENT_NAME_INVALID: Could not validate client name \"${clientName}\"`);\n  }\n  \n  console.log(`🏷️  Client validated: \"${clientIdentifier}\"`);\n  \n  // ============================================================================\n  // STEP 5: BACKEND STATUS CHECK - DUPLICATE PREVENTION\n  // ============================================================================\n  \n  console.log(`🔒 Checking Backend Status for duplicate execution...`);\n  \n  const recordData = webhookData.record_data;\n  \n  if (!recordData) {\n    throw new Error(`VALIDATION_FAILED: No record_data found in webhook payload`);\n  }\n  \n  const backendStatus = recordData.backend_status;\n  \n  console.log(`   Backend Status: \"${backendStatus}\"`);\n  \n  // Check 1: Already being processed by another execution\n  if (backendStatus === 'Is sharing') {\n    console.warn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n    console.warn(`⚠️  DUPLICATE EXECUTION DETECTED`);\n    console.warn(`   Record ${recordId} is already being processed`);\n    console.warn(`   Backend Status: \"${backendStatus}\"`);\n    console.warn(`   Action: Stopping execution immediately`);\n    console.warn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n    \n    throw new Error('DUPLICATE_EXECUTION: Another execution is already processing this record');\n  }\n  \n  // Check 2: Already successfully shared\n  if (backendStatus === 'Shared') {\n    console.warn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n    console.warn(`⚠️  ALREADY SHARED`);\n    console.warn(`   Record ${recordId} was already shared`);\n    console.warn(`   Backend Status: \"${backendStatus}\"`);\n    console.warn(`   Action: Stopping execution immediately`);\n    console.warn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n    \n    throw new Error('ALREADY_SHARED: This record was already successfully shared');\n  }\n  \n  // Check 3: Validate expected status\n  if (backendStatus !== 'Will be shared') {\n    console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n    console.error(`❌ UNEXPECTED BACKEND STATUS`);\n    console.error(`   Expected: \"Will be shared\"`);\n    console.error(`   Found: \"${backendStatus}\"`);\n    console.error(`   Action: Stopping execution`);\n    console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n    \n    throw new Error(`INVALID_STATUS: Expected \"Will be shared\", got \"${backendStatus}\"`);\n  }\n  \n  console.log(`   ✅ Status check passed - safe to proceed`);\n  \n  // ============================================================================\n  // STEP 6: LOG EXECUTION DETAILS\n  // ============================================================================\n  \n  console.log(`📋 Execution details:`);\n  console.log(`   Table ID: ${tableId}`);\n  console.log(`   Record ID: ${recordId}`);\n  console.log(`   Action: ${action}`);\n  console.log(`   Triggered by: ${triggeredBy}`);\n  console.log(`   Execution type: ${executionType}`);\n  console.log(`   Timestamp: ${webhookTimestamp}`);\n  \n  // ============================================================================\n  // STEP 6: BUILD OUTPUT OBJECT\n  // ============================================================================\n  \n  const output = {\n    // ===== EXECUTION TRACKING =====\n    execution_id: executionId,\n    webhook_received_at: currentTime,\n    workflow_name: \"The Posting Router V2\",\n    entry_point: \"Extract Webhook Data\",\n    \n    // ===== WEBHOOK PAYLOAD DATA =====\n    table_id: tableId,\n    record_id: recordId,\n    action: action,\n    triggered_by: triggeredBy,\n    execution_type: executionType,\n    timestamp: webhookTimestamp,\n    \n    // ===== CLIENT IDENTIFICATION =====\n    client_name: clientName,              // From Airtable (e.g., \"kurtuluş\")\n    client_identifier: clientIdentifier,  // Validated/cleaned (e.g., \"kurtuluş\")\n    \n    // ===== METADATA =====\n    validation_status: \"passed\",\n    processed_at: currentTime,\n    \n    // ===== ORIGINAL DATA (for debugging) =====\n    original_webhook: webhookData,\n    \n    // ===== PIPELINE STATUS =====\n    pipeline_status: {\n      validation_passed: true,\n      ready_for_next_step: true,\n      should_continue: true,\n      error_occurred: false\n    }\n  };\n  \n  // ============================================================================\n  // STEP 7: FINAL LOGGING\n  // ============================================================================\n  \n  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  console.log(`✅ WEBHOOK EXTRACTION SUCCESSFUL`);\n  console.log(`   Execution ID: ${executionId}`);\n  console.log(`   Client: ${clientName} (${clientIdentifier})`);\n  console.log(`   Record: ${recordId}`);\n  console.log(`   Triggered by: ${triggeredBy}`);\n  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  \n  return [{ json: output }];\n  \n} catch (error) {\n  // ============================================================================\n  // ERROR HANDLING\n  // ============================================================================\n  \n  const errorId = `error_${Date.now()}`;\n  const errorType = error.message.split(':')[0] || 'UNKNOWN_ERROR';\n  \n  console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  console.error(`❌ WEBHOOK EXTRACTION FAILED [${errorId}]`);\n  console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  console.error(`Error Type: ${errorType}`);\n  console.error(`Error Message: ${error.message}`);\n  console.error(`Stack: ${error.stack}`);\n  console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n  \n  // Build error output for error handling workflow\n  const errorOutput = {\n    // Error tracking\n    error_id: errorId,\n    error_type: errorType,\n    error_message: error.message,\n    error_stack: error.stack,\n    occurred_at: currentTime,\n    \n    // Workflow context\n    workflow_name: \"The Posting Router V2\",\n    node_name: \"Extract Webhook Data\",\n    \n    // What we could extract (if anything)\n    client_name: webhookData?.client_name || \"unknown\",\n    table_id: webhookData?.table_id || null,\n    record_id: webhookData?.record_id || null,\n    \n    // Original data for debugging\n    original_webhook: webhookData || null,\n    \n    // Pipeline status\n    pipeline_status: {\n      validation_passed: false,\n      ready_for_next_step: false,\n      should_continue: false,\n      error_occurred: true\n    },\n    \n    // Suggestions for fixing\n    troubleshooting: {\n      common_fixes: [\n        \"Check if webhook payload structure is correct\",\n        \"Verify all required fields are present\",\n        \"Ensure client_name is not empty\",\n        \"Confirm webhook is coming from correct Airtable automation\"\n      ]\n    }\n  };\n  \n  // Re-throw error to trigger error workflow path\n  throw new Error(`WEBHOOK_EXTRACTION_FAILED: ${error.message}`);\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        464
+      ],
+      "id": "899870af-bc08-44b8-8e65-11fd43f3678c",
+      "name": "Extract Webhook Data",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appYrhwbtn3Zb153w",
+          "mode": "list",
+          "cachedResultName": "Detso Lab",
+          "cachedResultUrl": "https://airtable.com/appYrhwbtn3Zb153w"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnyTHlVdztn0inX",
+          "mode": "list",
+          "cachedResultName": "Kurtuluş Main",
+          "cachedResultUrl": "https://airtable.com/appYrhwbtn3Zb153w/tblnyTHlVdztn0inX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Aksiyon": "Paylaşıldı",
+            "Gönderi URL": "={{ $json.supabase_log.permalink }}",
+            "Backend Status": "Shared",
+            "id": "={{ $json.airtable_update.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Gönderi",
+              "displayName": "Gönderi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi Metni",
+              "displayName": "Gönderi Metni",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Medya",
+              "displayName": "Medya",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım türü",
+              "displayName": "Paylaşım türü",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IG Reels",
+                  "value": "IG Reels"
+                },
+                {
+                  "name": "IG Feed",
+                  "value": "IG Feed"
+                },
+                {
+                  "name": "IG Story",
+                  "value": "IG Story"
+                },
+                {
+                  "name": "IG Carousel",
+                  "value": "IG Carousel"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Zamanı",
+              "displayName": "Paylaşım Zamanı",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Meter",
+              "displayName": "Meter",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Aksiyon",
+              "displayName": "Aksiyon",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Kullanıma Hazır",
+                  "value": "Kullanıma Hazır"
+                },
+                {
+                  "name": "PDF",
+                  "value": "PDF"
+                },
+                {
+                  "name": "Paylaşıma Hazır",
+                  "value": "Paylaşıma Hazır"
+                },
+                {
+                  "name": "Paylaşıldı",
+                  "value": "Paylaşıldı"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Gönderi URL",
+              "displayName": "Gönderi URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Paylaşım",
+              "displayName": "Paylaşım",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Medya URL",
+              "displayName": "Medya URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Tarihi",
+              "displayName": "Paylaşım Tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Backend Status",
+              "displayName": "Backend Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Will be shared",
+                  "value": "Will be shared"
+                },
+                {
+                  "name": "Is sharing",
+                  "value": "Is sharing"
+                },
+                {
+                  "name": "Shared",
+                  "value": "Shared"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Değiştirildi",
+              "displayName": "Değiştirildi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Evet",
+                  "value": "Evet"
+                },
+                {
+                  "name": "Hayır",
+                  "value": "Hayır"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Düzenlenmiş Metin",
+              "displayName": "Düzenlenmiş Metin",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Değişiklik Notu",
+              "displayName": "Değişiklik Notu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "İşlendi",
+              "displayName": "İşlendi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        896,
+        -128
+      ],
+      "id": "0a53fa1b-c760-44a5-8802-5df1a168dd75",
+      "name": "Application Update",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "uk3Tb4tQTfpPuvaO",
+          "name": "Airtable Personal Access Token account 2"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "detso",
+          "mode": "list",
+          "cachedResultName": "detso"
+        },
+        "table": {
+          "__rl": true,
+          "value": "posting_success_logs",
+          "mode": "list",
+          "cachedResultName": "posting_success_logs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "execution_id": "={{ $json.supabase_log.execution_id }}",
+            "created_at": "={{ $json.supabase_log.created_at }}",
+            "workflow_completed_at": "={{ $json.supabase_log.workflow_completed_at }}",
+            "media_type": "={{ $json.supabase_log.media_type }}",
+            "execution_time_ms": "={{ $json.supabase_log.execution_time_ms }}",
+            "published_at": "={{ $json.supabase_log.published_at }}",
+            "media_url": "={{ $json.supabase_log.media_url }}",
+            "permalink": "={{ $json.supabase_log.permalink }}",
+            "published_media_id": "={{ $json.supabase_log.published_media_id }}",
+            "status": "={{ $json.supabase_log.status }}",
+            "record_id": "={{ $json.supabase_log.record_id }}",
+            "table_id": "={{ $json.supabase_log.table_id }}",
+            "platform": "={{ $json.supabase_log.platform }}",
+            "client_name": "={{ $json.supabase_log.client_name }}",
+            "workflow_name": "={{ $json.supabase_log.workflow_name }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_name",
+              "displayName": "workflow_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "platform",
+              "displayName": "platform",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "table_id",
+              "displayName": "table_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_media_id",
+              "displayName": "published_media_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "media_url",
+              "displayName": "media_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execution_time_ms",
+              "displayName": "execution_time_ms",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "media_type",
+              "displayName": "media_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_completed_at",
+              "displayName": "workflow_completed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        896,
+        -288
+      ],
+      "id": "27ff1454-3933-47c7-8ea3-149e12fac6e6",
+      "name": "Logs Update",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// DB UPDATE & POST NOTIFICATION - INPUT DATA PROCESSING\n// ============================================================================\n\n// Extract incoming success data from client subworkflow\nconst successData = $json;\nconst executionContext = successData.execution_context;\nconst publicationData = successData.publication_data;\nconst performanceMetrics = successData.performance_metrics;\nconst databaseUpdate = successData.database_update;\n\n// Get dynamic workflow information\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\nconst currentWorkflowName = workflowInfo.name || \"DB Update & Post Notification\";\nconst currentExecutionId = executionInfo.id || \"unknown_execution\";\n\n// Get original webhook context for record identification\nlet originalWebhookContext;\ntry {\n  originalWebhookContext = $('Extract Webhook Data').item.json;\n} catch (e) {\n  console.log('Warning: Could not access webhook context, using execution context');\n  originalWebhookContext = executionContext;\n}\n\nconsole.log(`🔄 Processing success data for ${successData.client} - ${successData.platform}`);\nconsole.log(`📊 Original execution: ${executionContext.execution_id}`);\nconsole.log(`📋 Current workflow: ${currentWorkflowName}`);\n\n// ============================================================================\n// DATA VALIDATION\n// ============================================================================\n\n// Validate required fields\nif (!successData.success) {\n  throw new Error('VALIDATION_FAILED: Success flag is not true');\n}\n\nif (!publicationData?.published_media_id) {\n  throw new Error('VALIDATION_FAILED: Missing published_media_id');\n}\n\nif (!publicationData?.permalink) {\n  throw new Error('VALIDATION_FAILED: Missing permalink');\n}\n\nconsole.log(`✅ Validation passed - Media ID: ${publicationData.published_media_id}`);\n\n// ============================================================================\n// PREPARE DATA FOR PARALLEL PROCESSING\n// ============================================================================\n\nconst processedData = {\n  // ===== FOR SUPABASE SUCCESS LOGGING =====\n  supabase_log: {\n    execution_id: executionContext.execution_id,\n    workflow_name: currentWorkflowName,\n    client_name: successData.client,\n    platform: successData.platform,\n    table_id: executionContext.table_id || originalWebhookContext.table_id,\n    record_id: executionContext.record_id || originalWebhookContext.record_id,\n    status: \"success\",\n    published_media_id: publicationData.published_media_id,\n    permalink: publicationData.permalink,\n    media_url: publicationData.media_url || null,\n    published_at: publicationData.published_at,\n    execution_time_ms: performanceMetrics.total_execution_time_ms || 0,\n    media_type: publicationData.media_type || 'IMAGE',\n    workflow_completed_at: performanceMetrics.workflow_completed_at,\n    created_at: new Date().toISOString()\n  },\n  \n  // ===== FOR AIRTABLE RECORD UPDATE =====\n  airtable_update: {\n    table_id: executionContext.table_id || originalWebhookContext.table_id,\n    record_id: executionContext.record_id || originalWebhookContext.record_id,\n    updates: {\n      \"Aksiyon\": \"Paylaşıldı\",\n      \"Backend Status\": \"Shared\",\n      \"Gönderi URL\": publicationData.permalink,\n      \"Medya URL\": publicationData.media_url || publicationData.permalink,\n      \"Paylaşım Tarihi\": new Date().toLocaleDateString('tr-TR', {\n        day: '2-digit',\n        month: '2-digit', \n        year: 'numeric'\n      })\n    }\n  },\n  \n  // ===== FOR SUCCESS NOTIFICATION WITH CLIENT ROUTING =====\n// ===== FOR SUCCESS NOTIFICATION WITH CLIENT ROUTING =====\nnotification_data: {\n  client_name: successData.client,\n  client_identifier: executionContext.client_identifier,\n  platform: successData.platform,\n  permalink: publicationData.permalink,\n  published_at: publicationData.published_at,\n  execution_time: Math.round((performanceMetrics.total_execution_time_ms || 0) / 1000),\n  media_type: publicationData.media_type || 'IMAGE',\n  execution_id: executionContext.execution_id,\n  \n  // Build messages here with actual values\n  turkish_message: `✅ Gönderi yayınlandı!\n\n📱 Platform: ${successData.platform}\n🔗 ${publicationData.permalink}`,\n\n  admin_message: `✅ Published: ${successData.platform}\nClient: ${successData.client}\n${publicationData.permalink}`\n},\n  \n  // ===== GENERAL PROCESSING INFO =====\n  processing_info: {\n    processed_at: new Date().toISOString(),\n    processing_workflow: currentWorkflowName,\n    processing_execution_id: currentExecutionId,\n    original_client_execution: executionContext.execution_id,\n    data_source: 'client_subworkflow_success'\n  }\n};\n\n// ============================================================================\n// LOGGING & VALIDATION OUTPUT\n// ============================================================================\n\nconsole.log(`📤 Prepared data for parallel processing:`);\nconsole.log(`   • Supabase Log: ${processedData.supabase_log.execution_id}`);\nconsole.log(`   • Airtable Update: ${processedData.airtable_update.table_id}/${processedData.airtable_update.record_id}`);\nconsole.log(`   • Notification Routing: ${processedData.notification_data.client_identifier} -> ${processedData.notification_data.platform}`);\nconsole.log(`   • Turkish Message: \"${processedData.notification_data.turkish_message}\"`);\n\n// Validate critical fields before sending to parallel nodes\nconst criticalFields = [\n  processedData.supabase_log.execution_id,\n  processedData.airtable_update.table_id,\n  processedData.airtable_update.record_id,\n  processedData.notification_data.permalink,\n  processedData.notification_data.client_identifier\n];\n\nif (criticalFields.some(field => !field)) {\n  console.error('❌ Critical field validation failed:', {\n    execution_id: processedData.supabase_log.execution_id,\n    table_id: processedData.airtable_update.table_id,\n    record_id: processedData.airtable_update.record_id,\n    permalink: processedData.notification_data.permalink,\n    client_identifier: processedData.notification_data.client_identifier\n  });\n  throw new Error('VALIDATION_FAILED: Missing critical fields for parallel processing');\n}\n\nconsole.log(`✅ All validations passed - ready for parallel execution`);\n\nreturn [{ json: processedData }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -80
+      ],
+      "id": "ecf42186-18de-4e8c-9617-c8375059dc81",
+      "name": "Log Data Processing",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        528
+      ],
+      "id": "9cebb2d6-b315-4533-b752-f15f5d4ad5a3",
+      "name": "Error Processing1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "9010330f-d310-4b16-9018-23f0d2ba7569",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        560
+      ],
+      "id": "a20d9735-d968-4943-abc4-c9a605738fcd",
+      "name": "Schedule",
+      "webhookId": "9010330f-d310-4b16-9018-23f0d2ba7569"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "660f105b-e62f-46b1-a526-4c29c9b5f7a1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        384
+      ],
+      "id": "76094e99-4dc2-4093-be03-58a5950b32e7",
+      "name": "Share Now",
+      "webhookId": "660f105b-e62f-46b1-a526-4c29c9b5f7a1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "app6CaiSm3iHcY3Ev",
+          "mode": "list",
+          "cachedResultName": "Marketing Engine",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnyTHlVdztn0inX",
+          "mode": "list",
+          "cachedResultName": "MAIN",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev/tblnyTHlVdztn0inX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Backend Status": "Is sharing",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Gönderi",
+              "displayName": "Gönderi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi Metni",
+              "displayName": "Gönderi Metni",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Medya",
+              "displayName": "Medya",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım türü",
+              "displayName": "Paylaşım türü",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IG Reels",
+                  "value": "IG Reels"
+                },
+                {
+                  "name": "IG Feed",
+                  "value": "IG Feed"
+                },
+                {
+                  "name": "IG Story",
+                  "value": "IG Story"
+                },
+                {
+                  "name": "IG Carousel",
+                  "value": "IG Carousel"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Zamanı",
+              "displayName": "Paylaşım Zamanı",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Meter",
+              "displayName": "Meter",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Aksiyon",
+              "displayName": "Aksiyon",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Kullanıma Hazır",
+                  "value": "Kullanıma Hazır"
+                },
+                {
+                  "name": "PDF",
+                  "value": "PDF"
+                },
+                {
+                  "name": "Paylaşıma Hazır",
+                  "value": "Paylaşıma Hazır"
+                },
+                {
+                  "name": "Paylaşıldı",
+                  "value": "Paylaşıldı"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi URL",
+              "displayName": "Gönderi URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım",
+              "displayName": "Paylaşım",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Medya URL",
+              "displayName": "Medya URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Tarihi",
+              "displayName": "Paylaşım Tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Backend Status",
+              "displayName": "Backend Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Will be shared",
+                  "value": "Will be shared"
+                },
+                {
+                  "name": "Is sharing",
+                  "value": "Is sharing"
+                },
+                {
+                  "name": "Shared",
+                  "value": "Shared"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Değiştirildi",
+              "displayName": "Değiştirildi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Evet",
+                  "value": "Evet"
+                },
+                {
+                  "name": "Hayır",
+                  "value": "Hayır"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Düzenlenmiş Metin",
+              "displayName": "Düzenlenmiş Metin",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Değişiklik Notu",
+              "displayName": "Değişiklik Notu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "İşlendi",
+              "displayName": "İşlendi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "kurtuluş",
+                  "value": "kurtuluş"
+                },
+                {
+                  "name": "detsostudio",
+                  "value": "detsostudio"
+                },
+                {
+                  "name": "garnerhotelistanbul",
+                  "value": "garnerhotelistanbul"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -784,
+        368
+      ],
+      "id": "c1d9d966-fb9d-4ab0-87c5-aa3f2d7514d6",
+      "name": "Set Status: Is Sharing",
+      "retryOnFail": true,
+      "notesInFlow": false,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "NqCHhqCEfned8s1J",
+          "name": "Detso Dev"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "rPmAD4cx0PHt5tu1",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/rPmAD4cx0PHt5tu1",
+          "cachedResultName": "IG Carousel V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        352,
+        -160
+      ],
+      "id": "06ab2482-b189-4266-b08b-2e28d8527871",
+      "name": "IG Carousel"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "H3NwLw7ZKN9NN1Zf",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/H3NwLw7ZKN9NN1Zf",
+          "cachedResultName": "Reporting V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "turkish_message": "={{ $json.notification_data.turkish_message }}",
+            "client_name": "={{ $json.notification_data.client_name }}",
+            "admin_chat_id": "={{ $json.notification_data.admin_chat_id }}",
+            "client_chat_id": "={{ $json.notification_data.client_chat_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "turkish_message",
+              "displayName": "turkish_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "admin_chat_id",
+              "displayName": "admin_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "client_chat_id",
+              "displayName": "client_chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        912,
+        112
+      ],
+      "id": "df04d3ce-5817-445c-aefd-ff4648e733a9",
+      "name": "Reporting"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        656
+      ],
+      "id": "038820d9-39a9-471d-94ed-712677535b60",
+      "name": "Error Processing"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "app6CaiSm3iHcY3Ev",
+          "mode": "list",
+          "cachedResultName": "Detso Lab Dev",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnyTHlVdztn0inX",
+          "mode": "list",
+          "cachedResultName": "MAIN",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev/tblnyTHlVdztn0inX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Backend Status": "Will be shared",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Gönderi",
+              "displayName": "Gönderi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi Metni",
+              "displayName": "Gönderi Metni",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Medya",
+              "displayName": "Medya",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım türü",
+              "displayName": "Paylaşım türü",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IG Reels",
+                  "value": "IG Reels"
+                },
+                {
+                  "name": "IG Feed",
+                  "value": "IG Feed"
+                },
+                {
+                  "name": "IG Story",
+                  "value": "IG Story"
+                },
+                {
+                  "name": "IG Carousel",
+                  "value": "IG Carousel"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Zamanı",
+              "displayName": "Paylaşım Zamanı",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Meter",
+              "displayName": "Meter",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Aksiyon",
+              "displayName": "Aksiyon",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Kullanıma Hazır",
+                  "value": "Kullanıma Hazır"
+                },
+                {
+                  "name": "PDF",
+                  "value": "PDF"
+                },
+                {
+                  "name": "Paylaşıma Hazır",
+                  "value": "Paylaşıma Hazır"
+                },
+                {
+                  "name": "Paylaşıldı",
+                  "value": "Paylaşıldı"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi URL",
+              "displayName": "Gönderi URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım",
+              "displayName": "Paylaşım",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Medya URL",
+              "displayName": "Medya URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Tarihi",
+              "displayName": "Paylaşım Tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Backend Status",
+              "displayName": "Backend Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Will be shared",
+                  "value": "Will be shared"
+                },
+                {
+                  "name": "Is sharing",
+                  "value": "Is sharing"
+                },
+                {
+                  "name": "Shared",
+                  "value": "Shared"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Değiştirildi",
+              "displayName": "Değiştirildi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Evet",
+                  "value": "Evet"
+                },
+                {
+                  "name": "Hayır",
+                  "value": "Hayır"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Düzenlenmiş Metin",
+              "displayName": "Düzenlenmiş Metin",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Değişiklik Notu",
+              "displayName": "Değişiklik Notu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "İşlendi",
+              "displayName": "İşlendi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "KURTULUŞ",
+                  "value": "KURTULUŞ"
+                },
+                {
+                  "name": "MÜŞTERİ2",
+                  "value": "MÜŞTERİ2"
+                },
+                {
+                  "name": "detsostudio",
+                  "value": "detsostudio"
+                },
+                {
+                  "name": "garnerhotelistanbul",
+                  "value": "garnerhotelistanbul"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        528
+      ],
+      "id": "901f8a58-f553-4cb1-8d43-889fb5b0c4d5",
+      "name": "Set Status: Will be shared",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "NqCHhqCEfned8s1J",
+          "name": "Detso Dev"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "d2ohnnou3mnHEwV5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/d2ohnnou3mnHEwV5",
+          "cachedResultName": "Error Management - AI Powered V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        656
+      ],
+      "id": "024e7bc9-27ca-451c-80b0-99674d0bfe20",
+      "name": "Error Support"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "H3NwLw7ZKN9NN1Zf",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/H3NwLw7ZKN9NN1Zf",
+          "cachedResultName": "Reporting V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "client_name": "={{ $json.client_name }}",
+            "turkish_message": "={{ $json.turkish_message }}",
+            "admin_message": "={{ $json.admin_message }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "turkish_message",
+              "displayName": "turkish_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "admin_message",
+              "displayName": "admin_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        176
+      ],
+      "id": "2b245001-4700-4bb7-aa9b-f2105f4fefe2",
+      "name": "Notify Validation Failure"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// VALIDATION FAILURE HANDLER\n// Purpose: Detect why validation failed and prepare user notification\n// ============================================================================\n\nconst webhookData = $('Extract Webhook Data').item.json;\nconst clientRegistry = $('Client Registry').item.json;\nconst validationNode = $('Permission & Media Type').item.json;\n\nconsole.log('Validation failed for record:', webhookData.record_id);\n\n// ============================================================================\n// VALIDATION MESSAGE MAPPING\n// ============================================================================\n\nconst VALIDATION_MESSAGES = {\n  permission_not_ready: {\n    tr: \"📝 Gönderi 'Paylaşıma Hazır' olarak işaretlenmemiş. Lütfen Aksiyon sütununu güncelleyin.\",\n    tech: \"Aksiyon field not set to 'Paylaşıma Hazır'\"\n  },\n  story_wrong_aspect: {\n    tr: \"📐 IG Story için yanlış video formatı. Lütfen dikey (9:16) video yükleyin.\",\n    tech: \"Story requires vertical 9:16 aspect ratio\"\n  },\n  story_missing_media: {\n    tr: \"📎 Story için medya dosyası eksik. Lütfen video veya resim yükleyin.\",\n    tech: \"No media attached for Story\"\n  },\n  reels_wrong_format: {\n    tr: \"🎬 Reels için yanlış format. MP4 video (3-90 saniye, dikey) gerekli.\",\n    tech: \"Reels requires MP4 vertical video, 3-90 seconds\"\n  },\n  reels_missing_media: {\n    tr: \"📎 Reels için video eksik. Lütfen video yükleyin.\",\n    tech: \"No video attached for Reels\"\n  },\n  feed_missing_media: {\n    tr: \"📎 Feed için medya eksik. Lütfen resim veya video yükleyin.\",\n    tech: \"No media attached for Feed post\"\n  },\n  carousel_insufficient: {\n    tr: \"🖼️ Carousel için en az 2 medya gerekli. Lütfen daha fazla resim ekleyin.\",\n    tech: \"Carousel requires minimum 2 media items\"\n  },\n  unknown_validation: {\n    tr: \"⚠️ Doğrulama hatası. Lütfen gönderi detaylarını kontrol edin.\",\n    tech: \"Unknown validation failure\"\n  }\n};\n\n// ============================================================================\n// DETERMINE SPECIFIC FAILURE REASON\n// ============================================================================\n\nlet failureType = 'unknown_validation';\nlet platformInfo = '';\n\n// Check permission first\nif (validationNode.permission_check === false) {\n  failureType = 'permission_not_ready';\n}\n// Check media type validation\nelse if (validationNode.media_validation === false) {\n  const platform = validationNode.platform || webhookData.platform_type;\n  platformInfo = platform;\n  \n  if (platform === 'IG Story') {\n    failureType = validationNode.media_count === 0 ? 'story_missing_media' : 'story_wrong_aspect';\n  } else if (platform === 'IG Reels') {\n    failureType = validationNode.media_count === 0 ? 'reels_missing_media' : 'reels_wrong_format';\n  } else if (platform === 'IG Feed') {\n    failureType = 'feed_missing_media';\n  } else if (platform === 'IG Carousel') {\n    failureType = 'carousel_insufficient';\n  }\n}\n\nconst message = VALIDATION_MESSAGES[failureType];\n\n// ============================================================================\n// BUILD NOTIFICATION MESSAGES\n// ============================================================================\n\nconst turkishMessage = `⚠️ Gönderi paylaşılamadı\n\n${message.tr}\n\n${platformInfo ? `Platform: ${platformInfo}\\n` : ''}Record: ${webhookData.record_id.substring(0, 8)}...\n\nLütfen düzeltip tekrar deneyin.`;\n\nconst adminMessage = `⚠️ Validation Failed\n\nClient: ${webhookData.client_name}\nRecord: ${webhookData.record_id}\nReason: ${message.tech}\n${platformInfo ? `Platform: ${platformInfo}` : ''}`;\n\nconsole.log(`Validation failure: ${failureType}`);\n\n// ============================================================================\n// RETURN DATA FOR PARALLEL PROCESSING\n// ============================================================================\n\nreturn {\n  // For notification\n  client_name: webhookData.client_name,\n  turkish_message: turkishMessage,\n  admin_message: adminMessage,\n  \n  // For Airtable update\n  table_id: webhookData.table_id,\n  record_id: webhookData.record_id,\n  \n  // Metadata\n  failure_type: failureType,\n  failure_reason_tr: message.tr,\n  failure_reason_tech: message.tech,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        240
+      ],
+      "id": "4a1205e4-c2c1-48cd-bba4-30db20845685",
+      "name": "Validation Failure Handler",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "app6CaiSm3iHcY3Ev",
+          "mode": "list",
+          "cachedResultName": "Detso Lab Dev",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnyTHlVdztn0inX",
+          "mode": "list",
+          "cachedResultName": "MAIN",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev/tblnyTHlVdztn0inX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Backend Status": "Will be shared",
+            "id": "={{ $json.record_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Gönderi",
+              "displayName": "Gönderi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi Metni",
+              "displayName": "Gönderi Metni",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Medya",
+              "displayName": "Medya",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım türü",
+              "displayName": "Paylaşım türü",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IG Reels",
+                  "value": "IG Reels"
+                },
+                {
+                  "name": "IG Feed",
+                  "value": "IG Feed"
+                },
+                {
+                  "name": "IG Story",
+                  "value": "IG Story"
+                },
+                {
+                  "name": "IG Carousel",
+                  "value": "IG Carousel"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Zamanı",
+              "displayName": "Paylaşım Zamanı",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Meter",
+              "displayName": "Meter",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Aksiyon",
+              "displayName": "Aksiyon",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Kullanıma Hazır",
+                  "value": "Kullanıma Hazır"
+                },
+                {
+                  "name": "PDF",
+                  "value": "PDF"
+                },
+                {
+                  "name": "Paylaşıma Hazır",
+                  "value": "Paylaşıma Hazır"
+                },
+                {
+                  "name": "Paylaşıldı",
+                  "value": "Paylaşıldı"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi URL",
+              "displayName": "Gönderi URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım",
+              "displayName": "Paylaşım",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Medya URL",
+              "displayName": "Medya URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Tarihi",
+              "displayName": "Paylaşım Tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Backend Status",
+              "displayName": "Backend Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Will be shared",
+                  "value": "Will be shared"
+                },
+                {
+                  "name": "Is sharing",
+                  "value": "Is sharing"
+                },
+                {
+                  "name": "Shared",
+                  "value": "Shared"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Değiştirildi",
+              "displayName": "Değiştirildi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Evet",
+                  "value": "Evet"
+                },
+                {
+                  "name": "Hayır",
+                  "value": "Hayır"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Düzenlenmiş Metin",
+              "displayName": "Düzenlenmiş Metin",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Değişiklik Notu",
+              "displayName": "Değişiklik Notu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "İşlendi",
+              "displayName": "İşlendi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "KURTULUŞ",
+                  "value": "KURTULUŞ"
+                },
+                {
+                  "name": "MÜŞTERİ2",
+                  "value": "MÜŞTERİ2"
+                },
+                {
+                  "name": "detsostudio",
+                  "value": "detsostudio"
+                },
+                {
+                  "name": "garnerhotelistanbul",
+                  "value": "garnerhotelistanbul"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        560,
+        336
+      ],
+      "id": "8ea552a5-aeef-4f96-978a-14cd1ad9488b",
+      "name": "Set status: Will be shared",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "NqCHhqCEfned8s1J",
+          "name": "Detso Dev"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ifmNNhUMsgM1JerA",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ifmNNhUMsgM1JerA",
+          "cachedResultName": "Instagram Publishing V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        352,
+        16
+      ],
+      "id": "1a9bdf52-a008-4706-b207-c057b79b9a6d",
+      "name": "IG Engine"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f34b0373-6ae3-499f-9b1e-dfb65c6e4225",
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "IG Carousel",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        112,
+        -80
+      ],
+      "id": "6f744d66-10c4-44f2-bf20-f8a74235bbf5",
+      "name": "Publishing Router",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n   // FORMAT CLIENT CONFIG - Supabase Response Adapter with Full Validation\n   // ============================================================================\n   // This preserves ALL 4 validations from the original Client Registry node\n   \n   const webhookContext = $('Extract Webhook Data').item.json;\n   const supabaseResult = $json; // From Postgres/Supabase node\n   \n   const executionId = webhookContext.execution_id;\n   const clientName = webhookContext.client_name;\n   const clientIdentifier = webhookContext.client_identifier;\n   \n   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n   console.log(`🔍 CLIENT REGISTRY LOOKUP [${executionId}]`);\n   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n   console.log(`   Client Name: \"${clientName}\"`);\n   console.log(`   Client Identifier: \"${clientIdentifier}\"`);\n   \n   // ============================================================================\n   // VALIDATION 1: Client Identifier Provided (from webhook extraction)\n   // ============================================================================\n   // This is already validated in Extract Webhook Data, but double-check\n   \n   if (!clientIdentifier) {\n     console.error(`❌ CLIENT_REGISTRY_ERROR: No client_identifier provided`);\n     \n     return [{\n       json: {\n         error: true,\n         error_type: \"missing_client_identifier\",\n         error_severity: \"critical\",\n         message: \"client_identifier not provided\",\n         execution_id: executionId,\n         execution_status: \"failed\",\n         failed_at_step: \"client_registry\",\n         timestamp: new Date().toISOString(),\n         \n         pipeline_status: {\n           validation_passed: false,\n           ready_for_posting: false,\n           should_continue: false,\n           error_occurred: true\n         }\n       }\n     }];\n   }\n   \n   // ============================================================================\n   // VALIDATION 2: Client Exists in Registry\n   // ============================================================================\n   \n   if (!supabaseResult || (Array.isArray(supabaseResult) && supabaseResult.length === 0)) {\n     console.error(`❌ CLIENT_REGISTRY_ERROR: Unknown client: \"${clientName}\" (${clientIdentifier})`);\n     console.error(`   Client not found in Supabase registry or is inactive`);\n     \n     return [{\n       json: {\n         error: true,\n         error_type: \"unknown_client\",\n         error_severity: \"high\",\n         message: `Client \"${clientName}\" (${clientIdentifier}) not found in registry or inactive`,\n         client_identifier: clientIdentifier,\n         client_name: clientName,\n         execution_id: executionId,\n         execution_status: \"failed\",\n         failed_at_step: \"client_registry\",\n         timestamp: new Date().toISOString(),\n         \n         suggestion: \"Check Supabase: SELECT * FROM detso.client_registry WHERE client_name = '\" + clientName + \"'\",\n         \n         pipeline_status: {\n           validation_passed: false,\n           ready_for_posting: false,\n           should_continue: false,\n           error_occurred: true\n         }\n       }\n     }];\n   }\n   \n   // Extract the client config (Supabase returns array)\n   const clientConfig = Array.isArray(supabaseResult) ? supabaseResult[0] : supabaseResult;\n   \n   if (!clientConfig) {\n     throw new Error('SUPABASE_ERROR: Query returned empty result');\n   }\n   \n   // ============================================================================\n   // VALIDATION 3: Client is Active\n   // ============================================================================\n   // The SQL query already filters active=true, but this is a safety check\n   \n   if (!clientConfig.active) {\n     console.warn(`⚠️  CLIENT_REGISTRY_ERROR: Inactive client: ${clientName}`);\n     \n     return [{\n       json: {\n         error: true,\n         error_type: \"inactive_client\",\n         error_severity: \"medium\",\n         message: `Client \"${clientName}\" is marked as inactive`,\n         client_identifier: clientIdentifier,\n         client_name: clientConfig.instagram_page_name,\n         execution_id: executionId,\n         execution_status: \"failed\",\n         failed_at_step: \"client_registry\",\n         timestamp: new Date().toISOString(),\n         \n         suggestion: \"Activate in Supabase: UPDATE detso.client_registry SET active = true WHERE client_name = '\" + clientName + \"'\",\n         \n         pipeline_status: {\n           validation_passed: false,\n           ready_for_posting: false,\n           should_continue: false,\n           error_occurred: true\n         }\n       }\n     }];\n   }\n   \n   // ============================================================================\n   // VALIDATION 4: Instagram Page ID Present\n   // ============================================================================\n   \n   if (!clientConfig.instagram_page_id || clientConfig.instagram_page_id === 'REPLACE_WITH_ACTUAL_PAGE_ID') {\n     console.error(`❌ CLIENT_REGISTRY_ERROR: Missing page_id for ${clientName}`);\n     \n     return [{\n       json: {\n         error: true,\n         error_type: \"missing_page_id\",\n         error_severity: \"critical\",\n         message: `Client \"${clientName}\" has no instagram_page_id configured`,\n         client_identifier: clientIdentifier,\n         execution_id: executionId,\n         execution_status: \"failed\",\n         failed_at_step: \"client_registry\",\n         timestamp: new Date().toISOString(),\n         \n         suggestion: \"Add page_id in Supabase: UPDATE detso.client_registry SET instagram_page_id = 'YOUR_PAGE_ID' WHERE client_name = '\" + clientName + \"'\",\n         \n         pipeline_status: {\n           validation_passed: false,\n           ready_for_posting: false,\n           should_continue: false,\n           error_occurred: true\n         }\n       }\n     }];\n   }\n   \n   // ============================================================================\n   // SUCCESS: All Validations Passed\n   // ============================================================================\n   \n   console.log(`✅ Client Registry Success: ${clientConfig.instagram_page_name} (${clientConfig.instagram_page_id})`);\n   console.log(`   Active: ${clientConfig.active}`);\n   console.log(`   Notifications: ${clientConfig.notifications_enabled ? 'Enabled' : 'Disabled'}`);\n   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n   \n   // ============================================================================\n   // FORMAT OUTPUT - Match Original Client Registry Structure\n   // ============================================================================\n   \n   return [{\n     json: {\n       // Pass through all original webhook data\n       ...webhookContext,\n       \n       // Add Instagram configuration\n       instagram_business_account_id: clientConfig.instagram_page_id,\n       instagram_page_name: clientConfig.instagram_page_name,\n       \n       // Add Telegram configuration\n       telegram_channel_id: clientConfig.telegram_channel_id,\n       telegram_admin_chat_id: clientConfig.telegram_admin_chat_id,\n       notifications_enabled: clientConfig.notifications_enabled,\n       \n       // Add operational metadata\n       client_timezone: clientConfig.timezone,\n       client_active: clientConfig.active,\n       account_type: clientConfig.account_type,\n       \n       // Add Airtable config (for compatibility)\n       table_id: webhookContext.table_id || clientConfig.airtable_table_id,\n       airtable_base_id: clientConfig.airtable_base_id,\n       \n       // Validation status\n       registry_lookup_status: \"success\",\n       registry_lookup_at: new Date().toISOString(),\n       registry_source: \"supabase\",\n       \n       // Pipeline status\n       pipeline_status: {\n         validation_passed: true,\n         ready_for_posting: true,\n         should_continue: true,\n         error_occurred: false\n       }\n     }\n   }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -432,
+        208
+      ],
+      "id": "82a1e3e7-6e28-43cc-b48e-6bd9bf43d923",
+      "name": "Format Client Config",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM detso.client_registry \n   WHERE client_name = $1 \n   AND active = true\n   LIMIT 1",
+        "options": {
+          "queryReplacement": "={\n     \"parameters\": [\n       \"={{ $('Extract Webhook Data').item.json.client_name }}\"\n     ]\n   }"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -624,
+        272
+      ],
+      "id": "158925b4-77fc-49b0-980a-375d1c9ed68c",
+      "name": "Client Registry",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Sharing Permission & Media Type": {
+      "main": [
+        [
+          {
+            "node": "Permission Control",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permission Control": {
+      "main": [
+        [
+          {
+            "node": "Publishing Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Failure Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Webhook Data": {
+      "main": [
+        [
+          {
+            "node": "Set Status: Is Sharing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Data Processing": {
+      "main": [
+        [
+          {
+            "node": "Logs Update",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Application Update",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Reporting",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing1": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Application Update": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logs Update": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Extract Webhook Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Share Now": {
+      "main": [
+        [
+          {
+            "node": "Extract Webhook Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Status: Is Sharing": {
+      "main": [
+        [
+          {
+            "node": "Client Registry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Carousel": {
+      "main": [
+        [
+          {
+            "node": "Log Data Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Status: Will be shared",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Failure Handler": {
+      "main": [
+        [
+          {
+            "node": "Notify Validation Failure",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set status: Will be shared",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set status: Will be shared": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG Engine": {
+      "main": [
+        [
+          {
+            "node": "Log Data Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publishing Router": {
+      "main": [
+        [
+          {
+            "node": "IG Carousel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG Engine",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Registry": {
+      "main": [
+        [
+          {
+            "node": "Format Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Client Config": {
+      "main": [
+        [
+          {
+            "node": "Sharing Permission & Media Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "DJniklZaoePMyFyM"
+  },
+  "versionId": "c9f4e247-06da-4894-b3ca-39a73ea6adf9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "tGat649trlnXZ8KG",
+  "tags": [
+    {
+      "createdAt": "2025-08-04T17:15:42.302Z",
+      "updatedAt": "2025-08-04T17:15:42.302Z",
+      "id": "jZziYufitMcd2XBg",
+      "name": "v1"
+    }
+  ]
+}

@@ -1,0 +1,651 @@
+{
+  "name": "Proofread V4",
+  "nodes": [
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "airtabledata",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        0
+      ],
+      "id": "a2825c2a-4efb-4942-a55e-b4b482e0def2",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/app6CaiSm3iHcY3Ev/{{$node[\"LLM Data Processing\"].json.processing_info.table_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer patYqd0bxjwAi8ISV.b3b0ddd7ca1a105388152425c6f40fd53bb082f5bf02167d3d50f62354035cdc"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.airtable_payload }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1184,
+        -304
+      ],
+      "id": "edf47c01-ec0b-4c87-b44e-f83d23dd6f10",
+      "name": "Airtable Batch Update",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// LLM Data Processing - COMPLETE VERSION with change detection\nconst prep = $node[\"Format Client Config\"].json || $('Format Client Config').item.json;\nconst mapping = prep.record_mapping || {};\nconst aiEnvelope = $json || {};\nconst raw = (typeof aiEnvelope.output !== 'undefined') ? aiEnvelope.output : aiEnvelope;\n\n// Parse AI output\nlet updates = [];\nif (raw && typeof raw === 'string') {\n  try {\n    const arr = JSON.parse(raw);\n    if (Array.isArray(arr)) {\n      arr.forEach(it => {\n        const idx0 = Number(it.index) - 1;\n        const info = mapping[idx0];\n        if (info) {\n          const correctedText = it.corrected_text || info.original_text;\n          const changesMade = correctedText.trim() !== info.original_text.trim();\n          \n          updates.push({\n            record_id: info.record_id,\n            original_text: info.original_text,\n            corrected_text: correctedText,\n            changes_made: changesMade,\n            change_note: it.change_note || 'Değişiklik yok'\n          });\n        }\n      });\n    }\n  } catch(e) {\n    console.log('Parse error:', e.message);\n  }\n}\n\n// Calculate statistics\nconst changedTexts = updates.filter(u => u.changes_made).length;\nconst unchangedTexts = updates.filter(u => !u.changes_made).length;\n\n// Build Airtable payload with proper field updates\nconst airtableRecords = updates.map(u => ({\n  id: u.record_id,\n  fields: {\n    \"İşlendi\": true,\n    \"Değişiklik Notu\": u.change_note,\n    \"Değiştirildi\": u.changes_made ? \"Evet\" : \"Hayır\",\n    \"Düzenlenmiş Metin\": u.corrected_text\n  }\n})).concat(\n  (prep.empty_text_record_ids || []).map(id => ({\n    id,\n    fields: { \n      \"İşlendi\": true\n    }\n  }))\n);\n\nconsole.log(\"📝 Processing results:\");\nconsole.log(`   • Total updates: ${updates.length}`);\nconsole.log(`   • Changed: ${changedTexts}`);\nconsole.log(`   • Unchanged: ${unchangedTexts}`);\nconsole.log(`   • Empty text records: ${prep.empty_text_record_ids?.length || 0}`);\n\nreturn {\n  json: {\n    success: true,\n    ready_for_update: true,\n    updates,\n    total_updates: updates.length,\n    changes_made: changedTexts,\n    no_changes: unchangedTexts,\n    execution_id: prep.execution_id,\n    ai_thread_id: aiEnvelope.threadId || null,\n    processed_at: new Date().toISOString(),\n    empty_text_record_ids: prep.empty_text_record_ids || [],\n    \n    // Pass through processing_info for Airtable Update\n    processing_info: {\n      table_id: prep.table_id,\n      client_id: prep.client_id,\n      business_name: prep.business_name\n    },\n    \n    airtable_payload: {\n      records: airtableRecords\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -240
+      ],
+      "id": "48e5943c-6431-4575-b3c7-06847724e12c",
+      "name": "LLM Data Processing",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 📊 TEXT PROCESSING LOGGER\n// This node logs text processing activities to Supabase\n\n// Get data from previous nodes\nconst llmProcessingOutput = $node[\"LLM Data Processing\"].json;\nconst textDataPrep = $node[\"Format Client Config\"].json;\nconst airtableBatchUpdate = $node[\"Airtable Batch Update\"].json;\n\n// Calculate processing duration\nconst processingStart = new Date(textDataPrep.processed_at || new Date());\nconst processingEnd = new Date();\nconst processingDuration = processingEnd.getTime() - processingStart.getTime();\n\n// Get current date for generation_date\nconst currentDate = new Date();\nconst generationDate = currentDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD\n\n// Analyze processing results\nconst updatesData = llmProcessingOutput.updates || [];\nconst changedTexts = updatesData.filter(update => update.changes_made).length;\nconst unchangedTexts = updatesData.filter(update => !update.changes_made).length;\n\n// Determine processing status\nlet processingStatus = 'completed';\nlet errorMessage = null;\n\nif (textDataPrep.error) {\n  processingStatus = 'failed';\n  errorMessage = textDataPrep.message || 'Unknown error';\n} else if (changedTexts === 0 && unchangedTexts === 0) {\n  processingStatus = 'failed';\n  errorMessage = 'No texts were processed successfully';\n} else if (updatesData.length < textDataPrep.valid_texts_count) {\n  processingStatus = 'partial';\n  errorMessage = `Only ${updatesData.length} out of ${textDataPrep.valid_texts_count} texts were processed`;\n}\n\n// Analyze Airtable update results\nlet airtableSuccessful = 0;\nlet airtableFailed = 0;\n\ntry {\n  if (airtableBatchUpdate && airtableBatchUpdate.records) {\n    airtableSuccessful = Array.isArray(airtableBatchUpdate.records) ? \n                       airtableBatchUpdate.records.length : 1;\n  } else if (airtableBatchUpdate && !airtableBatchUpdate.error) {\n    airtableSuccessful = updatesData.length;\n  } else {\n    airtableFailed = updatesData.length;\n  }\n} catch (error) {\n  console.log(`⚠️ Could not analyze Airtable results: ${error.message}`);\n  airtableFailed = updatesData.length;\n}\n\n// Build the log entry\nconst logEntry = {\n  // Client & Business context (from Text Data Preparation - flat structure)\n  client_id: textDataPrep.client_id,\n  business_name: textDataPrep.business_name,\n  table_id: textDataPrep.table_id,\n  \n  // Processing Details\n  execution_id: textDataPrep.execution_id,\n  button_type: 'TEXT_EDIT',\n  generation_date: generationDate,\n  \n  // Content metrics\n  total_records_found: textDataPrep.total_records,\n  texts_processed: updatesData.length,\n  texts_changed: changedTexts,\n  texts_unchanged: unchangedTexts,\n  \n  // AI Processing details\n  ai_model: 'openai_assistant',\n  ai_thread_id: llmProcessingOutput.ai_thread_id || null,\n  processing_duration_ms: processingDuration,\n  \n  // Processing status\n  status: processingStatus,\n  error_message: errorMessage,\n  \n  // Airtable update results\n  airtable_updates_successful: airtableSuccessful,\n  airtable_updates_failed: airtableFailed,\n  \n  // Metadata\n  created_by: 'n8n_automation',\n  processed_at: new Date().toISOString()\n};\n\nconsole.log(`📊 Logging text processing for ${logEntry.business_name}:`);\nconsole.log(`📤 Execution: ${logEntry.execution_id}`);\nconsole.log(`📊 Stats: ${logEntry.texts_processed} processed, ${logEntry.texts_changed} changed, ${logEntry.texts_unchanged} unchanged`);\nconsole.log(`📅 Date: ${logEntry.generation_date}`);\nconsole.log(`⏱️ Duration: ${Math.round(logEntry.processing_duration_ms / 1000)}s`);\nconsole.log(`📌 Status: ${logEntry.status}`);\n\nif (logEntry.error_message) {\n  console.log(`⚠️ Error: ${logEntry.error_message}`);\n}\n\n// Return the log entry for Supabase\nreturn [{\n  json: logEntry\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        -368
+      ],
+      "id": "66b84a3b-c7f0-4fea-af56-ac89da5b1de8",
+      "name": "Text Processing Logger",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "assistant",
+        "assistantId": {
+          "__rl": true,
+          "value": "asst_e18yGf2iHD7Ug5deilz3b6r3",
+          "mode": "list",
+          "cachedResultName": "Proofread 4"
+        },
+        "prompt": "define",
+        "text": "={{ $json.user_message }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        640,
+        -176
+      ],
+      "id": "59ab4ef1-f859-45fe-918e-926d13afad71",
+      "name": "AI Assistant",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "7YmhvhDsaaBVx9uB",
+          "name": "General"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "detso",
+          "mode": "list",
+          "cachedResultName": "detso"
+        },
+        "table": {
+          "__rl": true,
+          "value": "text_processing_logs",
+          "mode": "list",
+          "cachedResultName": "text_processing_logs"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_id",
+              "displayName": "client_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "business_name",
+              "displayName": "business_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "table_id",
+              "displayName": "table_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "button_type",
+              "displayName": "button_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "generation_date",
+              "displayName": "generation_date",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "total_records_found",
+              "displayName": "total_records_found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texts_processed",
+              "displayName": "texts_processed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texts_changed",
+              "displayName": "texts_changed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texts_unchanged",
+              "displayName": "texts_unchanged",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_model",
+              "displayName": "ai_model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ai_thread_id",
+              "displayName": "ai_thread_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processing_duration_ms",
+              "displayName": "processing_duration_ms",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "airtable_updates_successful",
+              "displayName": "airtable_updates_successful",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "airtable_updates_failed",
+              "displayName": "airtable_updates_failed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_by",
+              "displayName": "created_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1584,
+        -432
+      ],
+      "id": "02074fea-6c2a-47b1-80b1-f6136e842562",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "755455ad-be2b-4eb4-9105-2abd16422ede",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        0
+      ],
+      "id": "748272f9-3518-4b11-880c-b1b7104c01bd",
+      "name": "TEXT_EDIT",
+      "webhookId": "755455ad-be2b-4eb4-9105-2abd16422ede"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract Webhook Data - Handle Aggregate wrapper for Proofreading\nconst input = $input.item.json;\n\nlet payload;\n\n// Handle different wrapper structures\nif (Array.isArray(input.airtabledata)) {\n    // Proofreading format: [{ airtabledata: [{ body: {...} }] }]\n    payload = input.airtabledata[0].body;\n} else if (Array.isArray(input.data)) {\n    // PDF format: [{ data: [{ body: {...} }] }]\n    payload = input.data[0].body;\n} else if (input.body) {\n    // Direct webhook format: { body: {...} }\n    payload = input.body;\n} else {\n    // Legacy format: direct payload\n    payload = input;\n}\n\nconsole.log('Extracted client_name:', payload.client_name);\nconsole.log('Records count:', payload.records?.length);\n\n// Validate required fields\nif (!payload.client_name) {\n    throw new Error('Missing client_name in payload');\n}\n\nreturn {\n    client_name: payload.client_name,\n    table_name: payload.table_name,\n    button_type: payload.button_type,\n    records: payload.records || [],\n    emptyTextRecordIds: payload.emptyTextRecordIds || [],\n    timestamp: payload.timestamp\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        0
+      ],
+      "id": "7a8dd80f-a4b9-4616-b8fc-d8ebf7645c7a",
+      "name": "Extract Webhook Data",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        0
+      ],
+      "id": "9bb50870-ca98-4276-8f81-eee226aa2691",
+      "name": "Error Processing"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "d2ohnnou3mnHEwV5",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/d2ohnnou3mnHEwV5",
+          "cachedResultName": "Error Management - AI Powered V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1968,
+        0
+      ],
+      "id": "2c0f71f4-1c4d-43d9-85e9-ea2961e69049",
+      "name": "Error Support"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM detso.client_registry \n   WHERE client_name = $1 \n   AND active = true\n   LIMIT 1",
+        "options": {
+          "queryReplacement": "={\n     \"parameters\": [\n       \"={{ $('Extract Webhook Data').item.json.client_name }}\"\n     ]\n   }"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        272,
+        -80
+      ],
+      "id": "c9501a2c-60c2-4211-bd79-3d8e68b64990",
+      "name": "Client Registry",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMAT CLIENT CONFIG - Proofread Adapter\n// ============================================================================\n\nconst webhookData = $('Extract Webhook Data').item.json;\nconst supabaseResult = $json;\n\nconsole.log(`🔍 CLIENT REGISTRY LOOKUP (Proofread)`);\nconsole.log(`   Client: ${webhookData.client_name}`);\n\n// ============================================================================\n// VALIDATION\n// ============================================================================\n\nif (!supabaseResult || (Array.isArray(supabaseResult) && supabaseResult.length === 0)) {\n  throw new Error(`CLIENT_NOT_FOUND: ${webhookData.client_name} not in registry or inactive`);\n}\n\nconst clientConfig = Array.isArray(supabaseResult) ? supabaseResult[0] : supabaseResult;\n\nif (!clientConfig.active) {\n  throw new Error(`CLIENT_INACTIVE: ${webhookData.client_name}`);\n}\n\nconsole.log(`✅ Client config loaded: ${clientConfig.instagram_page_name}`);\n\n// ============================================================================\n// FORMAT OUTPUT - Proofread Format\n// ============================================================================\n\nreturn {\n  ...webhookData,\n  \n  // Client configuration\n  client_config: {\n    client_id: clientConfig.client_identifier,\n    business_name: clientConfig.instagram_page_name,\n    table_id: clientConfig.airtable_table_id,\n    airtable_base: clientConfig.airtable_base_id,\n    telegram_chat_id: clientConfig.telegram_channel_id\n  },\n  \n  // Expose fields\n  client_id: clientConfig.client_identifier,\n  business_name: clientConfig.instagram_page_name\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -128
+      ],
+      "id": "5fe745d9-49b5-49e8-a098-427cefc57671",
+      "name": "Format Client Config",
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Extract Webhook Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Data Processing": {
+      "main": [
+        [
+          {
+            "node": "Airtable Batch Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable Batch Update": {
+      "main": [
+        [
+          {
+            "node": "Text Processing Logger",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Assistant": {
+      "main": [
+        [
+          {
+            "node": "LLM Data Processing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Processing Logger": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TEXT_EDIT": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Webhook Data": {
+      "main": [
+        [
+          {
+            "node": "Client Registry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Client Config": {
+      "main": [
+        [
+          {
+            "node": "AI Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Registry": {
+      "main": [
+        [
+          {
+            "node": "Format Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "G156XuOJ2RELTtiB"
+  },
+  "versionId": "63adc94e-32bc-4ac8-947a-cc281b8a83e3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "amfGJsLIZYQIXYWz",
+  "tags": [
+    {
+      "createdAt": "2025-08-15T15:07:46.694Z",
+      "updatedAt": "2025-08-15T15:07:46.694Z",
+      "id": "CGtmYkV5vcrKjrlo",
+      "name": "dev"
+    }
+  ]
+}

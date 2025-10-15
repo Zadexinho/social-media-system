@@ -1,0 +1,526 @@
+{
+  "name": "Error Management - AI Powered V4",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -160,
+        0
+      ],
+      "id": "7676d10b-4341-460c-9028-cc9681d89b64",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// CLIENT REGISTRY - Map client_name to Telegram chat_id (FROM SUPABASE)\n// ============================================================================\n\nconst errorData = $json;\nconst supabaseResult = $('Client Registry Lookup').item.json;\n\nconst ADMIN_CHAT_ID = \"623282562\";\n\n// Default to admin if client not found\nlet telegramChatId = ADMIN_CHAT_ID;\nlet businessName = errorData.client_name || \"unknown\";\n\n// If we found the client in Supabase, use their chat ID\nif (supabaseResult && Array.isArray(supabaseResult) && supabaseResult.length > 0) {\n  const clientConfig = supabaseResult[0];\n  telegramChatId = clientConfig.telegram_channel_id || ADMIN_CHAT_ID;\n  businessName = clientConfig.instagram_page_name || errorData.client_name;\n  \n  console.log(`✅ Found client in registry: ${businessName} → ${telegramChatId}`);\n} else {\n  console.warn(`⚠️ Client not found in registry: ${errorData.client_name}, using admin chat`);\n}\n\nreturn {\n  ...errorData,\n  telegram_chat_id: telegramChatId,\n  business_name: businessName,\n  admin_chat_id: ADMIN_CHAT_ID,\n  should_notify_client: telegramChatId !== ADMIN_CHAT_ID\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "38583816-69e9-4a53-a9de-cb1b2d052353",
+      "name": "Map Client to Telegram"
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorData = $json;\n\n// Extract node that failed (if available)\nlet nodeFailed = \"unknown\";\nif (errorData.error_stack) {\n  // Try to extract node name from stack trace\n  const stackMatch = errorData.error_stack.match(/at (.+?) \\(/);\n  if (stackMatch) nodeFailed = stackMatch[1];\n}\n\n// Build structured input for the assistant\nconst assistantInput = `**Workflow:** ${errorData.workflow_name}\n**Node Failed:** ${nodeFailed}\n**Error Message:** ${errorData.error_message}`;\n\nconsole.log(\"Sending to AI Assistant:\", assistantInput);\n\nreturn {\n  ...errorData,\n  assistant_input: assistantInput,\n  node_failed: nodeFailed\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a19314a9-e939-4f42-bbba-d07bb6cb06ad",
+      "name": "Prepare Assistant Input"
+    },
+    {
+      "parameters": {
+        "resource": "assistant",
+        "assistantId": {
+          "__rl": true,
+          "value": "asst_5hAOcO1Yd7b28S7AZQxswDev",
+          "mode": "list",
+          "cachedResultName": "Error Classification Assistant"
+        },
+        "prompt": "define",
+        "text": "=={{ $json.assistant_input }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        624,
+        0
+      ],
+      "id": "450e6a72-9447-4555-9d51-f60df1497831",
+      "name": "AI Error Classifier",
+      "credentials": {
+        "openAiApi": {
+          "id": "7YmhvhDsaaBVx9uB",
+          "name": "General"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorData = $json;\nconst aiOutput = errorData.output || errorData.text || \"{}\";\n\n// Parse AI classification\nlet classification = {\n  error_type: \"unknown_error\",\n  severity: \"medium\",\n  user_impacted: false,\n  user_message_turkish: null,\n  should_retry: false,\n  brief_analysis: \"Error classification failed\"\n};\n\ntry {\n  const parsed = JSON.parse(aiOutput);\n  classification = { ...classification, ...parsed };\n  console.log(\"AI Classification:\", classification);\n} catch (e) {\n  console.log(\"⚠️ Could not parse AI response, using defaults\");\n}\n\nreturn {\n  ...errorData,\n  error_type: classification.error_type,\n  severity: classification.severity,\n  user_impacted: classification.user_impacted,\n  user_message_tr: classification.user_message_turkish,\n  should_retry: classification.should_retry,\n  brief_analysis: classification.brief_analysis\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        0
+      ],
+      "id": "0edfcd06-1d90-472c-b0f4-17d7171fc325",
+      "name": "Parse AI Response"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "detso",
+          "mode": "list",
+          "cachedResultName": "detso"
+        },
+        "table": {
+          "__rl": true,
+          "value": "error_logs",
+          "mode": "list",
+          "cachedResultName": "error_logs"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "workflow_name",
+              "displayName": "workflow_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workflow_id",
+              "displayName": "workflow_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "log_type",
+              "displayName": "log_type",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "client_name",
+              "displayName": "client_name",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "platform",
+              "displayName": "platform",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "table_id",
+              "displayName": "table_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "triggered_by",
+              "displayName": "triggered_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execution_type",
+              "displayName": "execution_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_type",
+              "displayName": "error_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "media_count",
+              "displayName": "media_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content_type",
+              "displayName": "content_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "completed_at",
+              "displayName": "completed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "18400371-43d2-42cb-9da8-b0b898302646",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3e701245-fc78-4072-bffe-45c7650ce34b",
+              "leftValue": "={{ $json.should_notify_client }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "7e3cd5e9-7f71-48d5-9517-f84d6fb4bfcc",
+              "leftValue": "={{ $json.user_impacted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1392,
+        0
+      ],
+      "id": "d1bb9456-5c50-4583-9224-5f50621b62fb",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_chat_id }}",
+        "text": "={{ $json.user_message_tr }}\n\nZaman: {{ $now.format('DD.MM.YYYY HH:mm') }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1600,
+        -112
+      ],
+      "id": "928cc9b1-daa0-4007-b606-044a76373e64",
+      "name": "Send to Client",
+      "webhookId": "c63cc471-0a7a-4f7c-b8c6-14680f2b586d",
+      "credentials": {
+        "telegramApi": {
+          "id": "llJic9M68Mw5SUC4",
+          "name": "Noesis Marketing Engine"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.admin_chat_id }}",
+        "text": "=🚨 Error Alert\n\n**Client:** {{ $json.business_name }}\n**Workflow:** {{ $json.workflow_name }}\n**Node:** {{ $json.node_failed }}\n\n**Error Type:** {{ $json.error_type }}\n**Severity:** {{ $json.severity }}\n**User Impacted:** {{ $json.user_impacted ? 'YES ⚠️' : 'NO ✓' }}\n\n**AI Analysis:** {{ $json.brief_analysis }}\n\n**Error Message:**\n{{ $json.error_message }}\n\n**Should Retry:** {{ $json.should_retry ? 'Yes' : 'No' }}\n\n🔗 [View Execution](https://n8n.noesisautomation.com/workflow/{{ $json.workflow_id }}/executions/{{ $json.execution_id }})",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1392,
+        160
+      ],
+      "id": "fa57b16c-7f6e-4e4a-a256-2111bceba745",
+      "name": "Send to Admin",
+      "webhookId": "d06664d9-64b4-4e8f-9b09-a22a8ec076c1",
+      "credentials": {
+        "telegramApi": {
+          "id": "llJic9M68Mw5SUC4",
+          "name": "Noesis Marketing Engine"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT telegram_channel_id, instagram_page_name, client_identifier\n   FROM detso.client_registry \n   WHERE client_name = $1 \n   AND active = true\n   LIMIT 1",
+        "options": {
+          "queryReplacement": "={\n     \"parameters\": [\n       \"={{ $json.client_name }}\"\n     ]\n   }"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        16,
+        0
+      ],
+      "id": "fb8d7e30-1d02-4975-9669-7f1e9f90d6a8",
+      "name": "Client Registry Lookup",
+      "credentials": {
+        "postgres": {
+          "id": "51Xx4uWTr9mRh1c8",
+          "name": "Server DB"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Client Registry Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Client to Telegram": {
+      "main": [
+        [
+          {
+            "node": "Prepare Assistant Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Assistant Input": {
+      "main": [
+        [
+          {
+            "node": "AI Error Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Error Classifier": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send to Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send to Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Registry Lookup": {
+      "main": [
+        [
+          {
+            "node": "Map Client to Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "877f17ec-86b0-41eb-a080-2678dc0ef3e6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "d2ohnnou3mnHEwV5",
+  "tags": []
+}

@@ -1,0 +1,1045 @@
+{
+  "name": "Instagram Publishing V4",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        64,
+        144
+      ],
+      "id": "faf29415-c94d-44a3-8312-c0b5bbb59ac6",
+      "name": "Tier 1 Output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// UNIVERSAL INPUT VALIDATION - Instagram Publishing V2\n// ============================================================================\n// Purpose: Validate common fields for Story/Feed/Reels\n// ============================================================================\n\nconst input = $json;\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`📱 INSTAGRAM PUBLISHING V2 - INPUT VALIDATION`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\n// ============================================================================\n// 1. REQUIRED FIELDS VALIDATION\n// ============================================================================\n\nconst requiredFields = {\n  platform: input.platform,\n  mediaType: input.mediaType,\n  media: input.media,\n  instagram_business_account_id: input.instagram_business_account_id,\n  client_identifier: input.client_identifier\n};\n\nconst missingFields = [];\nObject.keys(requiredFields).forEach(field => {\n  if (!requiredFields[field]) {\n    missingFields.push(field);\n  }\n});\n\nif (missingFields.length > 0) {\n  throw new Error(`VALIDATION_FAILED: Missing required fields: ${missingFields.join(', ')}`);\n}\n\n// ============================================================================\n// 2. PLATFORM VALIDATION\n// ============================================================================\n\nconst validPlatforms = ['IG Story', 'IG Feed', 'IG Reels'];\nif (!validPlatforms.includes(input.platform)) {\n  throw new Error(`VALIDATION_FAILED: Invalid platform: ${input.platform}. Must be one of: ${validPlatforms.join(', ')}`);\n}\n\n// ============================================================================\n// 3. MEDIA VALIDATION\n// ============================================================================\n\nif (!Array.isArray(input.media) || input.media.length === 0) {\n  throw new Error(`VALIDATION_FAILED: No media provided`);\n}\n\n// ============================================================================\n// 4. EXECUTION CONTEXT SETUP\n// ============================================================================\n\nconst executionContext = {\n  execution_id: input.execution_context?.execution_id || input.execution_id || `ig_${Date.now()}`,\n  client_name: input.client_name || input.client_identifier,\n  client_identifier: input.client_identifier,\n  table_id: input.table_id,\n  record_id: input.record_id,\n  started_at: new Date().toISOString(),\n  triggered_by: input.triggered_by || 'posting_router',\n  execution_type: input.execution_type || 'immediate'\n};\n\nconsole.log(`✅ Validation passed for ${input.platform}`);\nconsole.log(`   • Client: ${executionContext.client_name}`);\nconsole.log(`   • Execution: ${executionContext.execution_id}`);\nconsole.log(`   • Media Type: ${input.mediaType}`);\nconsole.log(`   • Media Count: ${input.media.length}`);\n\n// ============================================================================\n// 5. SUCCESS OUTPUT\n// ============================================================================\n\nreturn [{\n  json: {\n    ...input,\n    execution_context: executionContext,\n    validation_passed: true,\n    validation_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        144
+      ],
+      "id": "eaa400ab-e52a-44bb-8296-cbe6d5a5f304",
+      "name": "Universal Input Validation",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "IG Story",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "18847471-77f9-43eb-aca7-cb2dfa6db61f"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ccc877f7-9654-4e52-9d01-d3db19ba9aba",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "IG Feed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0be91439-55de-4165-92af-cc84beeb195f",
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "IG Reels",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        352,
+        -16
+      ],
+      "id": "81586b9e-8867-44bb-99bb-edaae2f4d69f",
+      "name": "Platform Router",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mediaType }}",
+                    "rightValue": "video",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "59c4eb7f-cb39-4011-82e0-105f44e524ef"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4c01748e-f33b-4fab-8dab-3efb5a76d110",
+                    "leftValue": "={{ $json.mediaType }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        512,
+        -96
+      ],
+      "id": "06322e2a-7391-4c64-a785-e075659fc6bc",
+      "name": "Story Media Router"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{ $json.instagram_business_account_id }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "image_url",
+              "value": "={{ $json.media[0].url }}"
+            },
+            {
+              "name": "media_type",
+              "value": "STORIES"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        -144
+      ],
+      "id": "c81a4183-a939-4556-ad34-522a85a0e820",
+      "name": "Image Container",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{ $json.instagram_business_account_id }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "video_url",
+              "value": "={{ $json.media[0].url }}"
+            },
+            {
+              "name": "media_type",
+              "value": "STORIES"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        -288
+      ],
+      "id": "80a7847b-02bc-4ab3-9f83-0605c2c1e41e",
+      "name": "Video Container",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{ $json.instagram_business_account_id }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "image_url",
+              "value": "={{ $json.media[0].url }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $json.caption }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        0
+      ],
+      "id": "ca0a0a76-ce9e-4d77-acf5-07368befa8e1",
+      "name": "Feed Container",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{ $json.instagram_business_account_id }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "video_url",
+              "value": "={{ $json.media[0].url }}"
+            },
+            {
+              "name": "media_type",
+              "value": "=REELS"
+            },
+            {
+              "name": "cover_url",
+              "value": "={{ $json.media[1].url }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $json.caption }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        144
+      ],
+      "id": "b46a029c-f521-4a9c-bc16-fe0def22d1bc",
+      "name": "Reels Container",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// PREPARE PUBLISHER INPUT - For Tier 3\n// ============================================================================\n// Purpose: Format container data for IG Container Publisher\n// All branches (Story/Feed/Reels) merge here\n// ============================================================================\n\nconst containerResponse = $json; // From Story/Feed/Reels container creation\nconst inputData = $('Universal Input Validation').item.json;\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`📦 ${inputData.platform.toUpperCase()} - PREPARING FOR TIER 3`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\n// ============================================================================\n// VALIDATE CONTAINER CREATION\n// ============================================================================\n\nif (!containerResponse || !containerResponse.id) {\n  throw new Error(`${inputData.platform}_FAILED: Container creation did not return container ID`);\n}\n\nconsole.log(`✅ Container ID: ${containerResponse.id}`);\n\n// ============================================================================\n// DETERMINE WAIT DURATION\n// ============================================================================\n\nlet waitDuration = 10; // Default\n\nif (inputData.platform === 'IG Story') {\n  waitDuration = inputData.mediaType === 'video' ? 15 : 10;\n} else if (inputData.platform === 'IG Reels') {\n  waitDuration = 30; // Reels need longer processing time\n} else if (inputData.platform === 'IG Feed') {\n  waitDuration = 10;\n}\n\nconsole.log(`⏱️  Wait Duration: ${waitDuration}s (${inputData.platform}, ${inputData.mediaType})`);\n\n// ============================================================================\n// BUILD TIER 3 INPUT\n// ============================================================================\n\nconst tier3Input = {\n  // Required for Tier 3\n  container_id: containerResponse.id,\n  instagram_business_account_id: inputData.instagram_business_account_id,\n  platform: inputData.platform,\n  wait_duration: waitDuration,\n  \n  // Execution context\n  execution_context: inputData.execution_context,\n  \n  // Content information\n  content: {\n    caption: inputData.caption || '',\n    media_type: inputData.mediaType.toUpperCase(),\n    media_count: inputData.media.length\n  },\n  \n  // Client config for notifications\n  client_config: inputData.client_config || {}\n};\n\nconsole.log(`📊 Tier 3 Input Prepared:`);\nconsole.log(`   • Container ID: ${tier3Input.container_id}`);\nconsole.log(`   • Platform: ${tier3Input.platform}`);\nconsole.log(`   • Wait Duration: ${tier3Input.wait_duration}s`);\nconsole.log(`   • Client: ${tier3Input.execution_context.client_name}`);\n\nconsole.log(`✅ Ready to call Tier 3 Publisher`);\n\nreturn [{ json: tier3Input }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        -64
+      ],
+      "id": "b91dab45-759d-4bab-b3e2-a6c3508c5a76",
+      "name": "Prepare Publisher Input",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "3KKIXN76kjS7lv4y",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/3KKIXN76kjS7lv4y",
+          "cachedResultName": "IG Container Publisher V3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1264,
+        -144
+      ],
+      "id": "254bbc1f-3017-4c45-9f08-1a6f460ee471",
+      "name": "Call Tier 3 Publisher"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// WORKFLOW STATUS - Pass Through Tier 3 Result\n// ============================================================================\n\nconst tier3Result = $json;\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`✅ ${tier3Result.platform.toUpperCase()} - COMPLETE`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\nif (tier3Result.success) {\n  console.log(`📊 Publication Summary:`);\n  console.log(`   • Platform: ${tier3Result.platform}`);\n  console.log(`   • Permalink: ${tier3Result.publication_data.permalink}`);\n  console.log(`   • Media ID: ${tier3Result.publication_data.published_media_id}`);\n  console.log(`   • Client: ${tier3Result.execution_context.client_name}`);\n  console.log(`✅ Published successfully!`);\n}\n\n// Pass through Tier 3 result unchanged\nreturn [{ json: tier3Result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        -64
+      ],
+      "id": "a74b741c-65b5-43f1-8622-7099465fa705",
+      "name": "Workflow Status",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "content": "",
+        "height": 232,
+        "width": 596,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1504,
+        528
+      ],
+      "typeVersion": 1,
+      "id": "2b7c2478-283d-44fc-beac-1847e2f2b0bc",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "app6CaiSm3iHcY3Ev",
+          "mode": "list",
+          "cachedResultName": "Detso Lab Dev",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnyTHlVdztn0inX",
+          "mode": "list",
+          "cachedResultName": "MAIN",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev/tblnyTHlVdztn0inX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Backend Status": "Will be shared"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Gönderi",
+              "displayName": "Gönderi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi Metni",
+              "displayName": "Gönderi Metni",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Medya",
+              "displayName": "Medya",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım türü",
+              "displayName": "Paylaşım türü",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IG Reels",
+                  "value": "IG Reels"
+                },
+                {
+                  "name": "IG Feed",
+                  "value": "IG Feed"
+                },
+                {
+                  "name": "IG Story",
+                  "value": "IG Story"
+                },
+                {
+                  "name": "IG Carousel",
+                  "value": "IG Carousel"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Zamanı",
+              "displayName": "Paylaşım Zamanı",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Meter",
+              "displayName": "Meter",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Aksiyon",
+              "displayName": "Aksiyon",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Kullanıma Hazır",
+                  "value": "Kullanıma Hazır"
+                },
+                {
+                  "name": "PDF",
+                  "value": "PDF"
+                },
+                {
+                  "name": "Paylaşıma Hazır",
+                  "value": "Paylaşıma Hazır"
+                },
+                {
+                  "name": "Paylaşıldı",
+                  "value": "Paylaşıldı"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi URL",
+              "displayName": "Gönderi URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım",
+              "displayName": "Paylaşım",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Medya URL",
+              "displayName": "Medya URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Tarihi",
+              "displayName": "Paylaşım Tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Backend Status",
+              "displayName": "Backend Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Will be shared",
+                  "value": "Will be shared"
+                },
+                {
+                  "name": "Is sharing",
+                  "value": "Is sharing"
+                },
+                {
+                  "name": "Shared",
+                  "value": "Shared"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Değiştirildi",
+              "displayName": "Değiştirildi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Evet",
+                  "value": "Evet"
+                },
+                {
+                  "name": "Hayır",
+                  "value": "Hayır"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Düzenlenmiş Metin",
+              "displayName": "Düzenlenmiş Metin",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Değişiklik Notu",
+              "displayName": "Değişiklik Notu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "İşlendi",
+              "displayName": "İşlendi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "kurtuluş",
+                  "value": "kurtuluş"
+                },
+                {
+                  "name": "detsostudio",
+                  "value": "detsostudio"
+                },
+                {
+                  "name": "garnerhotelistanbul",
+                  "value": "garnerhotelistanbul"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1664,
+        592
+      ],
+      "id": "63b4d68d-73a3-4b9c-8816-4d104fda040f",
+      "name": "Set status: Will be shared",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "NqCHhqCEfned8s1J",
+          "name": "Detso Dev"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        592
+      ],
+      "id": "f5e73a21-56bb-4bff-8419-99750849e3f4",
+      "name": "Error Processing"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "DJniklZaoePMyFyM",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/DJniklZaoePMyFyM",
+          "cachedResultName": "Error Support V2 - AI Powered"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1920,
+        592
+      ],
+      "id": "174a2701-7835-494d-af1d-e4b1345553bc",
+      "name": "Error Support"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        528
+      ],
+      "id": "f80c3484-a976-4cdd-97e2-ce5dedadd271",
+      "name": "Error Processing1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Tier 1 Output": {
+      "main": [
+        [
+          {
+            "node": "Universal Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Universal Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Platform Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Router": {
+      "main": [
+        [
+          {
+            "node": "Story Media Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Feed Container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reels Container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Story Media Router": {
+      "main": [
+        [
+          {
+            "node": "Video Container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Image Container",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reels Container": {
+      "main": [
+        [
+          {
+            "node": "Prepare Publisher Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Feed Container": {
+      "main": [
+        [
+          {
+            "node": "Prepare Publisher Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image Container": {
+      "main": [
+        [
+          {
+            "node": "Prepare Publisher Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Container": {
+      "main": [
+        [
+          {
+            "node": "Prepare Publisher Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Publisher Input": {
+      "main": [
+        [
+          {
+            "node": "Call Tier 3 Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Tier 3 Publisher": {
+      "main": [
+        [
+          {
+            "node": "Workflow Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set status: Will be shared": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing": {
+      "main": [
+        [
+          {
+            "node": "Set status: Will be shared",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing1": {
+      "main": [
+        [
+          {
+            "node": "Error Support",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Status": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b0e3fdcd-9788-486e-b7fd-045bed2f85cd",
+  "meta": {
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "ifmNNhUMsgM1JerA",
+  "tags": []
+}

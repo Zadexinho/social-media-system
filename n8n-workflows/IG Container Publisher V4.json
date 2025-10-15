@@ -1,0 +1,803 @@
+{
+  "name": "IG Container Publisher V4",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// INPUT VALIDATION - IG Container Publisher\n// ============================================================================\n\nconst input = $json;\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`📦 IG CONTAINER PUBLISHER - INPUT VALIDATION`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\n// ============================================================================\n// 1. REQUIRED FIELDS VALIDATION\n// ============================================================================\n\nconst requiredFields = {\n  container_id: input.container_id,\n  instagram_business_account_id: input.instagram_business_account_id,\n  platform: input.platform,\n  wait_duration: input.wait_duration,\n  execution_context: input.execution_context\n};\n\nconst missingFields = [];\nObject.keys(requiredFields).forEach(field => {\n  if (!requiredFields[field]) {\n    missingFields.push(field);\n  }\n});\n\nif (missingFields.length > 0) {\n  console.error(`❌ Missing required fields: ${missingFields.join(', ')}`);\n  throw new Error(`VALIDATION_FAILED: Missing required fields: ${missingFields.join(', ')}`);\n}\n\nconsole.log(`✅ All required fields present`);\n\n// ============================================================================\n// 2. FIELD TYPE VALIDATION\n// ============================================================================\n\n// Validate container_id format\nif (typeof input.container_id !== 'string' || input.container_id.length < 5) {\n  console.error(`❌ Invalid container_id: ${input.container_id}`);\n  throw new Error(`VALIDATION_FAILED: Invalid container_id: ${input.container_id}`);\n}\n\n// Validate platform\nconst validPlatforms = ['IG Story', 'IG Feed', 'IG Reels', 'IG Carousel'];\nif (!validPlatforms.includes(input.platform)) {\n  console.error(`❌ Invalid platform: ${input.platform}`);\n  throw new Error(`VALIDATION_FAILED: Invalid platform: ${input.platform}. Must be one of: ${validPlatforms.join(', ')}`);\n}\n\n// Validate wait_duration\nif (typeof input.wait_duration !== 'number' || input.wait_duration < 1 || input.wait_duration > 60) {\n  console.error(`❌ Invalid wait_duration: ${input.wait_duration}`);\n  throw new Error(`VALIDATION_FAILED: Invalid wait_duration: ${input.wait_duration}. Must be between 1-60 seconds`);\n}\n\n// Validate execution_context has minimum required fields\nif (!input.execution_context || !input.execution_context.execution_id || !input.execution_context.client_name) {\n  console.error(`❌ Invalid execution_context`);\n  throw new Error(`VALIDATION_FAILED: execution_context missing execution_id or client_name`);\n}\n\nconsole.log(`✅ Field type validation passed`);\n\n// ============================================================================\n// 3. SUCCESS OUTPUT - VALIDATION PASSED\n// ============================================================================\n\nconsole.log(`📊 Validation Summary:`);\nconsole.log(`   • Container ID: ${input.container_id}`);\nconsole.log(`   • Platform: ${input.platform}`);\nconsole.log(`   • Client: ${input.execution_context.client_name}`);\nconsole.log(`   • Execution: ${input.execution_context.execution_id}`);\nconsole.log(`   • Wait Duration: ${input.wait_duration}s`);\nconsole.log(`   • Page ID: ${input.instagram_business_account_id}`);\n\nconsole.log(`✅ Input validation successful - proceeding to publish`);\n\n// Pass through all input data unchanged\nreturn [{\n  json: {\n    ...input,\n    validation_passed: true,\n    validation_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        208
+      ],
+      "id": "42ed1dd6-7a24-4c5d-b414-55d72eea521d",
+      "name": "Input Validation",
+      "alwaysOutputData": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.wait_duration }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        432,
+        96
+      ],
+      "id": "9d78c85d-a204-44a8-bf30-946f20c9903c",
+      "name": "Dynamic Wait",
+      "webhookId": "6e682f32-3409-46b9-9400-393af4e008d8"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        32,
+        304
+      ],
+      "id": "f30646f9-a1bb-4033-ba52-35d95fc85333",
+      "name": "Tier 2 Output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "252920b0-8879-422b-8717-88058b21e8ca",
+              "leftValue": "={{ $json.status_code }}",
+              "rightValue": "FINISHED",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        48
+      ],
+      "id": "f5cd367e-04d2-443d-9557-09046804afa4",
+      "name": "Status Router",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v22.0/{{ $json.container_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "status_code"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        608,
+        96
+      ],
+      "id": "05ed6720-06e0-4eb4-936a-c20100aa69ec",
+      "name": "Container Status Check",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v22.0/{{ $('Input Validation').item.json.instagram_business_account_id }}/media_publish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $('Input Validation').item.json.container_id }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        944,
+        16
+      ],
+      "id": "9324f057-338a-4859-be1c-dac59c9cc274",
+      "name": "Publication",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v22.0/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,media_type,media_url,caption,permalink"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1248,
+        -64
+      ],
+      "id": "1456d401-b46f-4449-9f44-046baabe642a",
+      "name": "Publication Check",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgyNLDQTpHE76Cwo",
+          "name": "Facebook Graph API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// SUCCESS OUTPUT FORMATTER - IG Container Publisher\n// ============================================================================\n\nconst publicationCheck = $json;\nconst inputData = $('Input Validation').item.json;\nconst executionContext = inputData.execution_context;\n\n// ============================================================================\n// SAFETY CHECK - Ensure we have required data\n// ============================================================================\n\nif (!publicationCheck || !publicationCheck.id) {\n  throw new Error('PUBLICATION_CHECK_FAILED: Missing media ID from publication check');\n}\n\nif (!publicationCheck.permalink) {\n  throw new Error('PUBLICATION_CHECK_FAILED: Missing permalink from publication check');\n}\n\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\nconsole.log(`✅ IG CONTAINER PUBLISHER - SUCCESS`);\nconsole.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);\n\n// ============================================================================\n// 1. CALCULATE PERFORMANCE METRICS\n// ============================================================================\n\nconst startTime = executionContext.started_at \n  ? new Date(executionContext.started_at).getTime() \n  : Date.now();\nconst endTime = Date.now();\nconst totalExecutionTime = endTime - startTime;\n\nconsole.log(`⏱️  Execution Time: ${totalExecutionTime}ms (${(totalExecutionTime/1000).toFixed(2)}s)`);\n\n// ============================================================================\n// 2. BUILD SUCCESS OUTPUT\n// ============================================================================\n\nconst successOutput = {\n  // Success flag\n  success: true,\n  platform: inputData.platform,\n  \n  // Publication data\n  publication_data: {\n    published_media_id: publicationCheck.id,\n    permalink: publicationCheck.permalink,\n    media_url: publicationCheck.media_url || publicationCheck.permalink,\n    published_at: new Date().toISOString(),\n    media_type: publicationCheck.media_type || inputData.content?.media_type || \"IMAGE\",\n    caption: publicationCheck.caption || inputData.content?.caption || \"\"\n  },\n  \n  // Performance metrics\n  performance_metrics: {\n    total_execution_time_ms: totalExecutionTime,\n    workflow_completed_at: new Date().toISOString(),\n    wait_duration_used: inputData.wait_duration,\n    retry_count: 0\n  },\n  \n  // Pass through execution context\n  execution_context: executionContext,\n  \n  // Database update payload for Posting Router\n  database_update: {\n    \"Aksiyon\": \"Paylaşıldı\",\n    \"Backend Status\": \"Shared\",\n    \"Gönderi URL\": publicationCheck.permalink,\n    \"Medya URL\": publicationCheck.media_url || publicationCheck.permalink,\n    \"Paylaşım Tarihi\": new Date().toLocaleDateString('tr-TR', {\n      day: '2-digit',\n      month: '2-digit',\n      year: 'numeric'\n    })\n  },\n  \n  // Client info for notifications\n  client_config: inputData.client_config || {}\n};\n\n// ============================================================================\n// 3. LOGGING\n// ============================================================================\n\nconsole.log(`📊 Publication Summary:`);\nconsole.log(`   • Media ID: ${successOutput.publication_data.published_media_id}`);\nconsole.log(`   • Permalink: ${successOutput.publication_data.permalink}`);\nconsole.log(`   • Platform: ${successOutput.platform}`);\nconsole.log(`   • Client: ${executionContext.client_name}`);\nconsole.log(`   • Execution: ${executionContext.execution_id}`);\nconsole.log(`   • Duration: ${(totalExecutionTime/1000).toFixed(2)}s`);\n\nconsole.log(`✅ Container published successfully!`);\n\nreturn [{ json: successOutput }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        -128
+      ],
+      "id": "207a592d-a432-4d86-88a2-217b4b0b1909",
+      "name": "Success Output Formatter",
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1104,
+        -64
+      ],
+      "id": "8c836b43-a220-4992-8a50-cc7c6eeda180",
+      "name": "Static Wait",
+      "webhookId": "e30f0d11-9b19-4d41-9108-c6d6c64fd3fc"
+    },
+    {
+      "parameters": {
+        "content": "",
+        "height": 232,
+        "width": 596,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1312,
+        224
+      ],
+      "typeVersion": 1,
+      "id": "24851705-477b-42af-8a8d-d59268db6cbe",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "app6CaiSm3iHcY3Ev",
+          "mode": "list",
+          "cachedResultName": "Detso Lab Dev",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblnyTHlVdztn0inX",
+          "mode": "list",
+          "cachedResultName": "MAIN",
+          "cachedResultUrl": "https://airtable.com/app6CaiSm3iHcY3Ev/tblnyTHlVdztn0inX"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.record_id }}",
+            "Backend Status": "Will be shared"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Gönderi",
+              "displayName": "Gönderi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi Metni",
+              "displayName": "Gönderi Metni",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Medya",
+              "displayName": "Medya",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım türü",
+              "displayName": "Paylaşım türü",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "IG Reels",
+                  "value": "IG Reels"
+                },
+                {
+                  "name": "IG Feed",
+                  "value": "IG Feed"
+                },
+                {
+                  "name": "IG Story",
+                  "value": "IG Story"
+                },
+                {
+                  "name": "IG Carousel",
+                  "value": "IG Carousel"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Zamanı",
+              "displayName": "Paylaşım Zamanı",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Meter",
+              "displayName": "Meter",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Aksiyon",
+              "displayName": "Aksiyon",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Kullanıma Hazır",
+                  "value": "Kullanıma Hazır"
+                },
+                {
+                  "name": "PDF",
+                  "value": "PDF"
+                },
+                {
+                  "name": "Paylaşıma Hazır",
+                  "value": "Paylaşıma Hazır"
+                },
+                {
+                  "name": "Paylaşıldı",
+                  "value": "Paylaşıldı"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Gönderi URL",
+              "displayName": "Gönderi URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım",
+              "displayName": "Paylaşım",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Medya URL",
+              "displayName": "Medya URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Paylaşım Tarihi",
+              "displayName": "Paylaşım Tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Backend Status",
+              "displayName": "Backend Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Will be shared",
+                  "value": "Will be shared"
+                },
+                {
+                  "name": "Is sharing",
+                  "value": "Is sharing"
+                },
+                {
+                  "name": "Shared",
+                  "value": "Shared"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Değiştirildi",
+              "displayName": "Değiştirildi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Evet",
+                  "value": "Evet"
+                },
+                {
+                  "name": "Hayır",
+                  "value": "Hayır"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Düzenlenmiş Metin",
+              "displayName": "Düzenlenmiş Metin",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Değişiklik Notu",
+              "displayName": "Değişiklik Notu",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "İşlendi",
+              "displayName": "İşlendi",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "kurtuluş",
+                  "value": "kurtuluş"
+                },
+                {
+                  "name": "detsostudio",
+                  "value": "detsostudio"
+                },
+                {
+                  "name": "garnerhotelistanbul",
+                  "value": "garnerhotelistanbul"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1472,
+        288
+      ],
+      "id": "89880807-9c80-4af4-b86e-bb296c8ac7bc",
+      "name": "Set status: Will be shared",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "NqCHhqCEfned8s1J",
+          "name": "Detso Dev"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        288
+      ],
+      "id": "240b9748-1850-424a-a032-a32d3994ea99",
+      "name": "Error Processing"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// MINIMAL ERROR HANDLER - Extract client + pass to Error Support\n// ============================================================================\n\nconst error = $json;\nconst workflowInfo = $workflow;\nconst executionInfo = $execution;\n\n// Extract error message\nlet errorMessage = \"Unknown error occurred\";\nif (typeof error === 'string') {\n  errorMessage = error;\n} else if (error?.message) {\n  errorMessage = error.message;\n} else {\n  errorMessage = JSON.stringify(error);\n}\n\n// Get client from webhook (if available)\nlet clientName = \"unknown\";\ntry {\n  const webhookData = $('Extract Webhook Data')?.item?.json;\n  if (webhookData?.client_name) {\n    clientName = webhookData.client_name;\n  }\n} catch (e) {\n  // No webhook data available\n}\n\n// Simple payload for Error Support\nreturn {\n  error_message: errorMessage,\n  error_stack: error.stack || null,\n  workflow_name: workflowInfo.name,\n  workflow_id: workflowInfo.id,\n  execution_id: executionInfo.id,\n  client_name: clientName, // ← Just this from webhook\n  timestamp: new Date().toISOString()\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        224
+      ],
+      "id": "944037d3-875d-4725-887b-8271755b927a",
+      "name": "Error Processing1"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "DJniklZaoePMyFyM",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/DJniklZaoePMyFyM",
+          "cachedResultName": "Error Support V2 - AI Powered"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1728,
+        288
+      ],
+      "id": "03683525-0118-4171-86dc-67773e2c9090",
+      "name": "Error Support1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Dynamic Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tier 2 Output": {
+      "main": [
+        [
+          {
+            "node": "Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dynamic Wait": {
+      "main": [
+        [
+          {
+            "node": "Container Status Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Router": {
+      "main": [
+        [
+          {
+            "node": "Publication",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dynamic Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Container Status Check": {
+      "main": [
+        [
+          {
+            "node": "Status Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publication": {
+      "main": [
+        [
+          {
+            "node": "Static Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publication Check": {
+      "main": [
+        [
+          {
+            "node": "Success Output Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Output Formatter": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Error Processing1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Static Wait": {
+      "main": [
+        [
+          {
+            "node": "Publication Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set status: Will be shared": {
+      "main": [
+        [
+          {
+            "node": "Error Support1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing": {
+      "main": [
+        [
+          {
+            "node": "Set status: Will be shared",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Processing1": {
+      "main": [
+        [
+          {
+            "node": "Error Support1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ba10c084-8cb0-40ff-8da2-7d9af281e5a6",
+  "meta": {
+    "instanceId": "5a6bb0b9841681d5325a083b1afebb7092e7071a0292c4c0fdce3fe33afdc5be"
+  },
+  "id": "3KKIXN76kjS7lv4y",
+  "tags": []
+}
