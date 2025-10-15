@@ -1,4 +1,4 @@
-# 🚀 Multi-Tenant Social Management Platform
+# Multi-Tenant Social Management Platform
 
 A comprehensive automation platform for managing Instagram content across multiple clients using n8n workflows, Airtable, and AI-powered features.
 
