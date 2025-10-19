@@ -9,7 +9,7 @@ A comprehensive automation platform for managing Instagram content across multip
 This platform automates the entire Instagram content lifecycle for multiple clients:
 - **Automated posting** to Instagram (Feed, Story, Reels, Carousel)
 - **AI-powered text proofreading** using OpenAI
-- **PDF generation** for content calendars via Google Slides
+- **PDF generation** for content calendars via Google Slides (Google AppScript)
 - **Real-time notifications** via Telegram
 - **Error tracking** and automated recovery
 - **Multi-tenant architecture** with centralized client management
